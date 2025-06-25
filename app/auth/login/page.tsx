@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,7 +15,6 @@ import Link from "next/link"
 import { Footer } from "@/components/footer"
 import { useStatusManager, StatusManager } from "@/components/ui/status-notification"
 import { supabase } from "@/lib/supabaseClient"
-import { Logo } from "@/components/logo"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -22,8 +22,22 @@ export default function LoginPage() {
     email: "",
     password: "",
   })
+  const [redirectUrl, setRedirectUrl] = useState("")
 
+  const searchParams = useSearchParams()
   const { notifications, removeNotification, showSuccess, showError, showLoading } = useStatusManager()
+
+  const passwordInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    // Get redirect URL from search parameters
+    const redirect = searchParams.get('redirect')
+    console.log('Raw redirect from search params:', redirect)
+    if (redirect) {
+      setRedirectUrl(redirect)
+      console.log('Set redirect URL to:', redirect)
+    }
+  }, [searchParams])
 
   const clearUserSession = () => {
     localStorage.removeItem("skillconnect_user")
@@ -35,93 +49,252 @@ export default function LoginPage() {
     showLoading("Signing you in...", "Please wait while we verify your credentials")
 
     try {
-      // Check if user exists in database
-      const { data: users, error: checkError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', formData.email.toLowerCase().trim())
-        .limit(1)
+      // Use Supabase Auth for login
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email.toLowerCase().trim(),
+        password: formData.password,
+      })
 
-      if (checkError) {
-        console.error('Error checking user:', checkError)
-        showError("Login failed", "An error occurred while checking your credentials")
-        return
-      }
-
-      if (!users || users.length === 0) {
-        showError("Account not found", "No account found with this email address. Please check your email or create a new account.")
-        return
-      }
-
-      const user = users[0]
-
-      // For now, we'll use a simple password check (in production, use proper hashing)
-      // This is a temporary solution - in a real app, you'd use Supabase Auth or proper password hashing
-      if (formData.password !== user.password) {
-        showError("Invalid credentials", "The email or password you entered is incorrect. Please try again.")
-        return
-      }
-
-      // Update last login
-      await supabase
-        .from('profiles')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', user.id)
-
-      // Create session data
-      const session = {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        loginTime: new Date().toISOString(),
-      }
-      
-      // Store session in sessionStorage (for auth guard)
-      sessionStorage.setItem("skillconnect_session", JSON.stringify(session))
-      
-      // Store user data in localStorage (for dashboard data)
-      localStorage.setItem("skillconnect_user", JSON.stringify(user))
-      
-      showSuccess("Login successful!", "Redirecting to your dashboard...")
-      
-      // Redirect based on user role
-      setTimeout(() => {
-        if (user.role === "admin") {
-          window.location.href = "/dashboard/admin"
-        } else if (user.role === "employer") {
-          window.location.href = "/dashboard/employer"
+      if (error) {
+        console.error('Login error:', error)
+        
+        if (error.message.includes('Email not confirmed')) {
+          showError("Email not verified", "Please check your email and click the verification link before logging in.")
+          // Redirect to verification page
+          setTimeout(() => {
+            window.location.href = "/auth/verify-email"
+          }, 2000)
+        } else if (error.message.includes('Invalid login credentials')) {
+          showError("Invalid credentials", "The email or password you entered is incorrect. Please try again.")
         } else {
-          window.location.href = "/dashboard/seeker"
+          showError("Login failed", error.message)
         }
-      }, 2000)
+        return
+      }
+
+      if (data.user) {
+        // Check if user has verified their email
+        if (!data.user.email_confirmed_at) {
+          showError("Email not verified", "Please check your email and click the verification link before logging in.")
+          // Store email for verification page
+          sessionStorage.setItem("pending_verification", JSON.stringify({
+            email: formData.email.toLowerCase().trim()
+          }))
+          // Redirect to verification page
+          setTimeout(() => {
+            window.location.href = "/auth/verify-email"
+          }, 2000)
+          return
+        }
+
+        // Get user profile from database
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
+
+        if (profileError) {
+          console.error('Error fetching profile:', profileError.message || profileError)
+          
+          // If profile doesn't exist, try to create it
+          if (profileError.code === 'PGRST116') { // No rows returned
+            console.log('Profile not found, attempting to create one...')
+            
+            try {
+              const newProfile = {
+                id: data.user.id,
+                first_name: data.user.user_metadata?.first_name || '',
+                last_name: data.user.user_metadata?.last_name || '',
+                email: data.user.email || '',
+                phone: data.user.user_metadata?.phone || '',
+                role: data.user.user_metadata?.role || 'seeker',
+                created_at: new Date().toISOString(),
+                last_login: new Date().toISOString(),
+                // Role-specific fields
+                ...(data.user.user_metadata?.role === "seeker" && {
+                  skills: [],
+                  experience: "",
+                  education: "",
+                  location: "",
+                  bio: "",
+                }),
+                ...(data.user.user_metadata?.role === "employer" && {
+                  company_name: "",
+                  company_size: "",
+                  industry: "",
+                  website: "",
+                  description: "",
+                }),
+              }
+
+              const { data: createdProfile, error: createError } = await supabase
+                .from('profiles')
+                .insert([newProfile])
+                .select()
+                .single()
+
+              if (createError) {
+                console.error('Error creating profile during login:', createError.message || createError)
+                showError("Profile creation failed", "Error creating user profile. Please contact support.")
+                return
+              }
+
+              console.log('Profile created successfully during login:', createdProfile)
+              
+              // Use the created profile
+              const session = {
+                userId: data.user.id,
+                id: data.user.id,
+                email: data.user.email,
+                role: createdProfile.role,
+                firstName: createdProfile.first_name,
+                lastName: createdProfile.last_name,
+                loginTime: new Date().toISOString(),
+                isLoggedIn: true,
+              }
+              
+              // Store session in sessionStorage (for auth guard)
+              sessionStorage.setItem("skillconnect_session", JSON.stringify({ ...session, lastLogin: Date.now() }))
+              
+              // Store user data in localStorage (for dashboard data)
+              localStorage.setItem("skillconnect_user", JSON.stringify(createdProfile))
+              
+              showSuccess("Login successful!", "Redirecting...")
+              
+              // Add debugging
+              console.log('Redirect URL:', redirectUrl)
+              console.log('User role:', createdProfile.role)
+              console.log('Session data:', session)
+              console.log('Profile data:', createdProfile)
+              
+              // Redirect based on redirect URL or user role
+              setTimeout(() => {
+                console.log('About to redirect...')
+                if (redirectUrl) {
+                  console.log('Redirecting to:', redirectUrl)
+                  window.location.href = redirectUrl
+                } else if (createdProfile.role === "admin") {
+                  console.log('Redirecting to admin dashboard')
+                  window.location.href = "/dashboard/admin"
+                } else if (createdProfile.role === "employer") {
+                  console.log('Redirecting to employer dashboard')
+                  window.location.href = "/dashboard/employer"
+                } else {
+                  console.log('Redirecting to seeker dashboard')
+                  window.location.href = "/dashboard/seeker"
+                }
+              }, 2000)
+              return
+              
+            } catch (error) {
+              console.error('Error creating profile during login:', error instanceof Error ? error.message : error)
+              showError("Profile creation failed", "Error creating user profile. Please contact support.")
+              return
+            }
+          } else {
+            showError("Login failed", `Error fetching user profile: ${profileError.message || 'Unknown error'}`)
+            return
+          }
+        }
+
+        if (!profile) {
+          showError("Profile not found", "User profile not found. Please contact support.")
+          return
+        }
+
+        // Update last login
+        await supabase
+          .from('profiles')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', data.user.id)
+
+        // Create session data
+        const session = {
+          userId: data.user.id,
+          id: data.user.id,
+          email: data.user.email,
+          role: profile.role,
+          firstName: profile.first_name,
+          lastName: profile.last_name,
+          loginTime: new Date().toISOString(),
+          isLoggedIn: true,
+        }
+        
+        // Store session in sessionStorage (for auth guard)
+        sessionStorage.setItem("skillconnect_session", JSON.stringify({ ...session, lastLogin: Date.now() }))
+        
+        // Store user data in localStorage (for dashboard data)
+        localStorage.setItem("skillconnect_user", JSON.stringify(profile))
+        
+        showSuccess("Login successful!", "Redirecting...")
+        
+        // Add debugging
+        console.log('Redirect URL:', redirectUrl)
+        console.log('User role:', profile.role)
+        console.log('Session data:', session)
+        console.log('Profile data:', profile)
+        
+        // Redirect based on redirect URL or user role
+        setTimeout(() => {
+          console.log('About to redirect...')
+          if (redirectUrl) {
+            console.log('Redirecting to:', redirectUrl)
+            window.location.href = redirectUrl
+          } else if (profile.role === "admin") {
+            console.log('Redirecting to admin dashboard')
+            window.location.href = "/dashboard/admin"
+          } else if (profile.role === "employer") {
+            console.log('Redirecting to employer dashboard')
+            window.location.href = "/dashboard/employer"
+          } else {
+            console.log('Redirecting to seeker dashboard')
+            window.location.href = "/dashboard/seeker"
+          }
+        }, 2000)
+      }
     } catch (error) {
-      console.error('Error during login:', error)
+      console.error('Login error:', error)
       showError("Login failed", "An unexpected error occurred. Please try again.")
     }
   }
 
-  const handleGoogleLogin = () => {
-    showError("Google Login", "Google OAuth integration is not available in this demo")
+  const handleGoogleLogin = async () => {
+    showLoading("Connecting to Google...", "Please wait while we authenticate with Google")
+
+    try {
+      // Start Google OAuth flow with Supabase
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectUrl || '')}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        }
+      })
+
+      if (error) {
+        console.error('Google OAuth error:', error)
+        showError("Google Login Failed", error.message || "Failed to connect with Google. Please try again.")
+        return
+      }
+
+      // The user will be redirected to Google for authentication
+      // After successful authentication, they'll be redirected back to /auth/callback
+      console.log('Google OAuth initiated:', data)
+      
+    } catch (error) {
+      console.error('Google login error:', error)
+      showError("Google Login Failed", "An unexpected error occurred. Please try again.")
+    }
   }
 
   return (
     <div className="min-h-screen bg-light-gradient">
       <StatusManager notifications={notifications} onRemove={removeNotification} />
       
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-orange-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <Logo />
-            <Link href="/auth/signup" className="btn-secondary px-6 py-2">
-              Sign Up
-            </Link>
-          </div>
-        </div>
-      </div>
-
       <div className="section-simple flex items-center justify-center px-4">
         <div className="w-full max-w-md">
           {/* Welcome Section */}
@@ -131,7 +304,7 @@ export default function LoginPage() {
               <span className="text-orange-800 text-sm font-medium">Welcome Back</span>
             </div>
 
-            <h1 className="heading-lg text-slate-900 mb-2">Sign in to your account</h1>
+            <h1 className="text-2xl font-semibold text-center mb-4">Sign in to your account</h1>
             <p className="text-simple text-slate-600">Continue your journey to find amazing opportunities</p>
           </div>
 
@@ -176,6 +349,7 @@ export default function LoginPage() {
                       value={formData.password}
                       onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
                       required
+                      ref={passwordInputRef}
                     />
                     <button
                       type="button"

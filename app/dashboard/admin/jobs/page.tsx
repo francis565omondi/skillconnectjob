@@ -75,16 +75,16 @@ export default function AdminJobsPage() {
       } else {
         const formattedJobs = jobsData.map((job: any) => ({
           id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
+          title: job.title || 'N/A',
+          company: job.company || 'N/A',
+          location: job.location || 'N/A',
           salary: job.salary || 'Not specified',
-          status: job.status || 'active',
-          postedDate: new Date(job.created_at).toLocaleDateString(),
-          employer: `${job.profiles?.first_name || 'Unknown'} ${job.profiles?.last_name || 'User'}`,
-          employerEmail: job.profiles?.email || 'No email',
+          status: job.status || 'N/A',
+          postedDate: job.created_at ? new Date(job.created_at).toLocaleDateString() : 'N/A',
+          employer: job.profiles ? [job.profiles.first_name, job.profiles.last_name].filter(Boolean).join(' ') || job.profiles.email || 'N/A' : 'N/A',
+          employerEmail: job.profiles?.email || 'N/A',
           applications: job.applications_count || 0,
-          description: job.description,
+          description: job.description || 'N/A',
         }))
         
         setJobs(formattedJobs)
@@ -396,22 +396,22 @@ export default function AdminJobsPage() {
                               <TableRow key={job.id} className="border-orange-100 hover:bg-orange-100">
                                 <TableCell>
                                   <div>
-                                    <div className="font-medium text-slate-900">{job.title}</div>
-                                    <div className="text-sm text-slate-600">{job.company}</div>
+                                    <div className="font-medium text-slate-900">{job.title || 'N/A'}</div>
+                                    <div className="text-sm text-slate-600">{job.company || 'N/A'}</div>
                                     <div className="text-xs text-slate-500 flex items-center">
                                       <MapPin className="w-3 h-3 mr-1" />
-                                      {job.location}
+                                      {job.location || 'N/A'}
                                     </div>
                                     <div className="text-xs text-slate-500 flex items-center">
                                       <DollarSign className="w-3 h-3 mr-1" />
-                                      {job.salary}
+                                      {job.salary || 'Not specified'}
                                     </div>
                                   </div>
                                 </TableCell>
                                 <TableCell>
                                   <div>
-                                    <div className="font-medium text-slate-900">{job.employer}</div>
-                                    <div className="text-sm text-slate-600">{job.employerEmail}</div>
+                                    <div className="font-medium text-slate-900">{job.employer || 'N/A'}</div>
+                                    <div className="text-sm text-slate-600">{job.employerEmail || 'N/A'}</div>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -424,10 +424,10 @@ export default function AdminJobsPage() {
                                           : "bg-red-500"
                                     } text-white border-0 rounded-xl`}
                                   >
-                                    {job.status}
+                                    {job.status || 'N/A'}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-slate-600">{job.postedDate}</TableCell>
+                                <TableCell className="text-slate-600">{job.postedDate || 'N/A'}</TableCell>
                                 <TableCell className="text-slate-600">{job.applications}</TableCell>
                                 <TableCell>
                                   <div className="flex space-x-2">

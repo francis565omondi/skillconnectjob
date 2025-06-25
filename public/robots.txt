@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://skillconnect.ke/sitemap.xml
+
+# Disallow admin and private areas
+Disallow: /dashboard/admin/
+Disallow: /auth/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /clear-cache/
+Disallow: /fix-auth/
+Disallow: /diagnostic/
+Disallow: /test/
+
+# Allow important pages
+Allow: /jobs/
+Allow: /about/
+Allow: /contact/
+Allow: /privacy/
+Allow: /terms/
+Allow: /pricing/
+
+# Crawl delay (optional)
+Crawl-delay: 1 

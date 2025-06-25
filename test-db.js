@@ -1,3 +1,6 @@
+// Test database connectivity and permissions
+// Run this with: node test-db.js
+
 const { createClient } = require('@supabase/supabase-js')
 
 const supabaseUrl = 'https://oesnkmwbznwuyxpgofwd.supabase.co'
@@ -6,98 +9,87 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 async function testDatabase() {
-  console.log('Testing database connection...')
+  console.log('Testing database connectivity...')
   
   try {
-    // Check current records in profiles table
-    console.log('\n1. Checking current profiles...')
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
+    // Test 1: Check if we can read from jobs table
+    console.log('\n1. Testing read access to jobs table...')
+    const { data: jobs, error: readError } = await supabase
+      .from('jobs')
       .select('*')
-      .order('created_at', { ascending: false })
+      .limit(1)
     
-    if (profilesError) {
-      console.error('❌ Profiles table error:', profilesError)
-      return
+    if (readError) {
+      console.error('Read error:', readError)
     } else {
-      console.log('✅ Profiles table exists')
-      console.log('Current records:', profiles.length)
-      if (profiles.length > 0) {
-        console.log('Latest 3 records:')
-        profiles.slice(0, 3).forEach((profile, index) => {
-          console.log(`${index + 1}. ID: ${profile.id}`)
-          console.log(`   Name: ${profile.first_name} ${profile.last_name}`)
-          console.log(`   Email: ${profile.email}`)
-          console.log(`   Role: ${profile.role}`)
-          console.log(`   Created: ${profile.created_at}`)
-          console.log('---')
-        })
-      } else {
-        console.log('No profiles found in database')
-      }
+      console.log('Read successful, found', jobs?.length || 0, 'jobs')
     }
 
-    // Test inserting a new record
-    console.log('\n2. Testing insert operation...')
-    const testUser = {
-      id: `test_${Date.now()}`,
-      first_name: 'Test',
-      last_name: 'User',
-      email: `test${Date.now()}@example.com`,
-      phone: '+254700000000',
-      password: 'testpassword123',
-      role: 'seeker',
-      created_at: new Date().toISOString(),
-      last_login: new Date().toISOString()
+    // Test 2: Check if applications table exists
+    console.log('\n2. Testing applications table...')
+    const { data: applications, error: appsError } = await supabase
+      .from('applications')
+      .select('*')
+      .limit(1)
+    
+    if (appsError) {
+      console.error('Applications table error:', appsError)
+    } else {
+      console.log('Applications table accessible, found', applications?.length || 0, 'applications')
     }
 
-    console.log('Attempting to insert test user...')
+    // Test 3: Check table structure
+    console.log('\n3. Testing table structure...')
+    const { data: columns, error: structureError } = await supabase
+      .from('jobs')
+      .select('*')
+      .limit(0)
+    
+    if (structureError) {
+      console.error('Structure error:', structureError)
+    } else {
+      console.log('Table structure accessible')
+    }
+
+    // Test 4: Check RLS policies
+    console.log('\n4. Testing RLS policies...')
+    const { data: policies, error: policyError } = await supabase
+      .rpc('get_policies', { table_name: 'jobs' })
+      .catch(() => ({ data: null, error: { message: 'RPC function not available' } }))
+    
+    if (policyError) {
+      console.log('Policy check error (normal):', policyError.message)
+    } else {
+      console.log('Policies:', policies)
+    }
+
+    // Test 5: Try to insert a test record (this should fail due to RLS)
+    console.log('\n5. Testing insert (should fail due to RLS)...')
+    const testJob = {
+      employer_id: 'test_user_123',
+      title: 'Test Job',
+      company: 'Test Company',
+      location: 'Test Location',
+      type: 'full-time',
+      description: 'Test description',
+      status: 'draft'
+    }
+    
     const { data: insertData, error: insertError } = await supabase
-      .from('profiles')
-      .insert([testUser])
+      .from('jobs')
+      .insert(testJob)
       .select()
-
+    
     if (insertError) {
-      console.error('❌ Insert error:', insertError)
-      console.error('Error details:', {
-        message: insertError.message,
-        code: insertError.code,
-        details: insertError.details,
-        hint: insertError.hint
-      })
+      console.log('Insert failed as expected:', insertError.message)
+      console.log('Error code:', insertError.code)
+      console.log('Error details:', insertError.details)
     } else {
-      console.log('✅ Insert successful:', insertData)
-      
-      // Verify the record was actually saved
-      console.log('\n3. Verifying saved record...')
-      const { data: verifyData, error: verifyError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', testUser.id)
-        .single()
-
-      if (verifyError) {
-        console.error('❌ Verification error:', verifyError)
-      } else {
-        console.log('✅ Record verified in database:', verifyData)
-      }
-      
-      // Clean up test data
-      console.log('\n4. Cleaning up test data...')
-      const { error: deleteError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', testUser.id)
-      
-      if (deleteError) {
-        console.error('❌ Cleanup error:', deleteError)
-      } else {
-        console.log('✅ Test data cleaned up')
-      }
+      console.log('Insert succeeded (unexpected):', insertData)
     }
 
   } catch (error) {
-    console.error('❌ General error:', error)
+    console.error('Test failed:', error)
   }
 }
 

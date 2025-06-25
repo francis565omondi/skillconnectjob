@@ -62,10 +62,13 @@ import {
   X,
   AlertTriangle,
   Info,
+  Camera,
 } from "lucide-react"
 import Link from "next/link"
 import { EmployerGuard } from "@/components/admin-auth-guard"
 import { useStatusManager, StatusManager } from "@/components/ui/status-notification"
+import { Logo } from "@/components/logo"
+import { supabase } from "@/lib/supabaseClient"
 
 type SettingsSection = "account" | "password" | "notifications" | "privacy" | "deactivate"
 
@@ -131,6 +134,10 @@ function SettingsPageContent() {
     description: "",
   })
 
+  // Company Image State
+  const [companyImage, setCompanyImage] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+
   // Password Change State
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -168,16 +175,17 @@ function SettingsPageContent() {
         const userData = getUserData()
         if (userData) {
           setAccountInfo({
-            firstName: userData.firstName || "",
-            lastName: userData.lastName || "",
+            firstName: userData.firstName || userData.first_name || "",
+            lastName: userData.lastName || userData.last_name || "",
             email: userData.email || "",
             phone: userData.phone || "",
-            companyName: userData.companyName || "",
-            companySize: userData.companySize || "",
+            companyName: userData.companyName || userData.company_name || "",
+            companySize: userData.companySize || userData.company_size || "",
             industry: userData.industry || "",
             website: userData.website || "",
             description: userData.description || "",
           })
+          setCompanyImage(userData.company_image || null)
         }
         
         showSuccess("Settings loaded successfully")
@@ -188,6 +196,11 @@ function SettingsPageContent() {
 
     loadUserData()
   }, [showLoading, showSuccess, showError])
+
+  // Debug useEffect to track companyImage state changes
+  useEffect(() => {
+    console.log('Company image state changed:', companyImage)
+  }, [companyImage])
 
   // Password validation
   const validatePassword = (password: string) => {
@@ -205,22 +218,208 @@ function SettingsPageContent() {
 
   const passwordValidation = validatePassword(passwordData.newPassword)
 
+  // Test storage bucket accessibility
+  const testStorageBucket = async () => {
+    try {
+      console.log('Testing storage bucket accessibility...')
+      
+      // Try to list files in the bucket
+      const { data: files, error } = await supabase.storage
+        .from('company-logos')
+        .list('', { limit: 1 })
+      
+      if (error) {
+        console.error('Storage bucket test failed:', error)
+        showError("Storage Test Failed", `Cannot access storage bucket: ${error.message}`)
+        return false
+      } else {
+        console.log('Storage bucket test successful:', files)
+        showSuccess("Storage Test", "Storage bucket is accessible!")
+        return true
+      }
+    } catch (error) {
+      console.error('Storage test error:', error)
+      showError("Storage Test Error", "Failed to test storage bucket")
+      return false
+    }
+  }
+
+  // Handle company image upload
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const userData = getUserData()
+    if (!userData?.id) {
+      showError("User not found", "Please refresh the page and try again")
+      return
+    }
+
+    // Validate file
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      showError("File too large", "Please select an image smaller than 5MB")
+      return
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      showError("Invalid file type", "Please select a JPEG, PNG, GIF, or WebP image")
+      return
+    }
+
+    setUploading(true)
+    try {
+      console.log('Starting image upload...', { 
+        fileName: file.name, 
+        fileSize: file.size, 
+        fileType: file.type,
+        userId: userData.id 
+      })
+      
+      const fileExt = file.name.split('.').pop()
+      const fileName = `company_${userData.id}_${Date.now()}.${fileExt}`
+      
+      console.log('Attempting upload with filename:', fileName)
+      
+      // Method 1: Try direct upload
+      let uploadResult = await supabase.storage
+        .from('company-logos')
+        .upload(fileName, file, { 
+          upsert: true,
+          cacheControl: '3600'
+        })
+      
+      console.log('Upload result:', uploadResult)
+      
+      if (uploadResult.error) {
+        console.error('Upload failed:', uploadResult.error)
+        
+        // Method 2: Try without upsert
+        console.log('Trying upload without upsert...')
+        uploadResult = await supabase.storage
+          .from('company-logos')
+          .upload(fileName, file, { 
+            cacheControl: '3600'
+          })
+        
+        if (uploadResult.error) {
+          console.error('Second upload attempt failed:', uploadResult.error)
+          throw new Error(`Upload failed: ${uploadResult.error.message}`)
+        }
+      }
+      
+      console.log('Upload successful:', uploadResult.data)
+      
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('company-logos')
+        .getPublicUrl(fileName)
+      
+      console.log('Public URL generated:', publicUrlData.publicUrl)
+      
+      const imageUrl = publicUrlData.publicUrl
+      
+      // Update state immediately for immediate display
+      setCompanyImage(imageUrl)
+      console.log('Company image state updated:', imageUrl)
+      
+      // Save to database
+      console.log('Saving to database...')
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ company_image: imageUrl })
+        .eq('id', userData.id)
+      
+      if (dbError) {
+        console.error('Database save error:', dbError)
+        // Don't throw error here, just log it
+        console.warn('Image uploaded but database save failed')
+      } else {
+        console.log('Database save successful')
+      }
+      
+      // Update localStorage
+      const updatedUserData = {
+        ...userData,
+        company_image: imageUrl
+      }
+      localStorage.setItem("skillconnect_user", JSON.stringify(updatedUserData))
+      console.log('localStorage updated')
+      
+      showSuccess("Company logo uploaded successfully!")
+      
+      // Force re-render
+      setTimeout(() => {
+        setCompanyImage(imageUrl)
+        console.log('Forced re-render completed')
+      }, 100)
+      
+    } catch (error) {
+      console.error('Error in image upload:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      showError("Failed to upload image", errorMessage)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   // Handle account information update
   const handleAccountUpdate = async () => {
+    const userData = getUserData()
+    if (!userData?.id) {
+      showError("User not found", "Please refresh the page and try again")
+      return
+    }
+
     showLoading("Updating account information...", "Please wait")
 
-    const result = await simulateApiCall(() => {
-      const success = updateUserData(accountInfo)
-      if (!success) {
-        throw new Error("Failed to update account information")
-      }
-      return accountInfo
-    }, 1500)
+    try {
+      // Update database
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          first_name: accountInfo.firstName,
+          last_name: accountInfo.lastName,
+          email: accountInfo.email,
+          phone: accountInfo.phone,
+          company_name: accountInfo.companyName,
+          company_size: accountInfo.companySize,
+          industry: accountInfo.industry,
+          website: accountInfo.website,
+          description: accountInfo.description,
+          company_image: companyImage,
+        })
+        .eq('id', userData.id)
 
-    if (result.status === "success") {
+      if (error) {
+        throw error
+      }
+
+      // Update local storage
+      const updatedUserData = {
+        ...userData,
+        first_name: accountInfo.firstName,
+        last_name: accountInfo.lastName,
+        firstName: accountInfo.firstName,
+        lastName: accountInfo.lastName,
+        email: accountInfo.email,
+        phone: accountInfo.phone,
+        company_name: accountInfo.companyName,
+        companyName: accountInfo.companyName,
+        company_size: accountInfo.companySize,
+        companySize: accountInfo.companySize,
+        industry: accountInfo.industry,
+        website: accountInfo.website,
+        description: accountInfo.description,
+        company_image: companyImage,
+      }
+      
+      localStorage.setItem("skillconnect_user", JSON.stringify(updatedUserData))
+      
       showSuccess("Account information updated successfully!")
-    } else {
-      showError("Update failed", result.message)
+    } catch (error) {
+      console.error('Error updating account:', error)
+      showError("Update failed", "Please try again")
     }
   }
 
@@ -434,6 +633,80 @@ function SettingsPageContent() {
                   placeholder="Tell us about your company..."
                   rows={4}
                 />
+              </div>
+              
+              {/* Company Logo Upload */}
+              <div className="space-y-4">
+                <Label>Company Logo</Label>
+                <div className="flex items-center space-x-6">
+                  <div className="relative">
+                    <div className="w-24 h-24 bg-orange-500 rounded-full flex items-center justify-center text-white text-2xl font-bold overflow-hidden border-4 border-white shadow-lg">
+                      {companyImage ? (
+                        <>
+                          <img
+                            src={companyImage}
+                            alt="Company Logo"
+                            className="w-24 h-24 rounded-full object-cover"
+                            onLoad={() => console.log('Image loaded successfully:', companyImage)}
+                            onError={(e) => console.error('Image failed to load:', companyImage, e)}
+                            key={companyImage}
+                          />
+                          {/* Debug info - remove this later */}
+                          <div className="absolute top-0 left-0 bg-black/50 text-white text-xs p-1 rounded">
+                            {companyImage ? 'Has URL' : 'No URL'}
+                          </div>
+                        </>
+                      ) : (
+                        <Building className="w-12 h-12" />
+                      )}
+                      {uploading && (
+                        <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded-full">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <label className="absolute bottom-0 right-0 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-orange-600 hover:bg-white transition-colors border border-orange-200 cursor-pointer shadow-md">
+                      <Camera className="w-4 h-4" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+                  </div>
+                  
+                  <div className="flex-1">
+                    <p className="text-sm text-slate-600 mb-2">
+                      Upload your company logo to make your profile more professional.
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Recommended: Square image, 200x200px or larger. Max 5MB.
+                    </p>
+                    {/* Debug info - remove this later */}
+                    {companyImage && (
+                      <p className="text-xs text-blue-600 mt-2">
+                        Current image URL: {companyImage.substring(0, 50)}...
+                      </p>
+                    )}
+                    {/* Show current state for debugging */}
+                    <p className="text-xs text-gray-500 mt-1">
+                      State: {companyImage ? 'Has Image' : 'No Image'} | Uploading: {uploading ? 'Yes' : 'No'}
+                    </p>
+                    
+                    {/* Test button for debugging */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={testStorageBucket}
+                      className="mt-2 text-xs"
+                    >
+                      Test Storage Bucket
+                    </Button>
+                  </div>
+                </div>
               </div>
               
               <Button 
@@ -854,11 +1127,8 @@ function SettingsPageContent() {
         <div className="flex min-h-screen w-full">
           <Sidebar className="border-r border-orange-200 bg-white">
             <SidebarHeader>
-              <div className="flex items-center space-x-3 px-4 py-4">
-                <div className="w-10 h-10 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-                  <Building className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-xl font-bold text-slate-900">SkillConnect</span>
+              <div className="px-4 py-4">
+                <Logo showTagline={false} />
               </div>
             </SidebarHeader>
 
@@ -974,13 +1244,6 @@ function SettingsPageContent() {
           </Sidebar>
 
           <SidebarInset className="bg-transparent">
-            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl">
-              <SidebarTrigger className="-ml-1 text-slate-700 hover:bg-orange-50 hover:text-orange-600 rounded-xl" />
-              <div className="flex-1">
-                <h1 className="text-lg font-semibold text-slate-900">Settings</h1>
-              </div>
-            </header>
-
             <main className="flex-1 space-y-8 p-6 scroll-simple">
               <div className="grid gap-8 lg:grid-cols-3">
                 {/* Left Column: Navigation */}

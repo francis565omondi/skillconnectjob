@@ -45,6 +45,8 @@ import Link from "next/link"
 import { useStatusManager, StatusManager } from "@/components/ui/status-notification"
 import { SeekerGuard } from "@/components/admin-auth-guard"
 import { supabase } from "@/lib/supabaseClient"
+import { safeJsonParse } from "@/lib/utils"
+import { Logo } from "@/components/logo"
 
 interface UserSession {
   id: string;
@@ -52,6 +54,17 @@ interface UserSession {
   lastName: string;
   email: string;
   phone: string;
+}
+
+// Helper function to safely parse JSON
+const safeParse = (jsonString: string | null, fallback: any) => {
+  if (!jsonString) return fallback
+  try {
+    return JSON.parse(jsonString)
+  } catch (error) {
+    console.error('Error parsing JSON:', error)
+    return fallback
+  }
 }
 
 export default function SeekerProfilePage() {
@@ -75,14 +88,22 @@ export default function SeekerProfilePage() {
       try {
         setIsLoading(true)
         
-        // Get user from localStorage
+        // Get user from localStorage with proper error handling
         const userData = localStorage.getItem("skillconnect_user")
         if (!userData) {
           showError("User not found", "Please log in again")
           return
         }
         
-        const currentUser = JSON.parse(userData)
+        let currentUser
+        try {
+          currentUser = JSON.parse(userData)
+        } catch (parseError) {
+          console.error('Error parsing user data from localStorage:', parseError)
+          showError("Invalid user data", "Please log in again")
+          return
+        }
+        
         setUser(currentUser)
 
         // Fetch profile from database
@@ -104,10 +125,31 @@ export default function SeekerProfilePage() {
             education: [],
           })
         } else {
-          // Parse skills from JSON string if it exists
-          const skills = profileData.skills ? JSON.parse(profileData.skills) : []
-          const experience = profileData.experience ? JSON.parse(profileData.experience) : []
-          const education = profileData.education ? JSON.parse(profileData.education) : []
+          // Parse skills from JSON string if it exists with error handling
+          let skills = []
+          let experience = []
+          let education = []
+          
+          try {
+            skills = profileData.skills ? JSON.parse(profileData.skills) : []
+          } catch (e) {
+            console.error('Error parsing skills:', e)
+            skills = []
+          }
+          
+          try {
+            experience = profileData.experience ? JSON.parse(profileData.experience) : []
+          } catch (e) {
+            console.error('Error parsing experience:', e)
+            experience = []
+          }
+          
+          try {
+            education = profileData.education ? JSON.parse(profileData.education) : []
+          } catch (e) {
+            console.error('Error parsing education:', e)
+            education = []
+          }
           
           setProfile({
             title: profileData.title || "",
@@ -181,7 +223,12 @@ export default function SeekerProfilePage() {
     // Reset to original data if needed
     const storedProfile = localStorage.getItem("skillconnect_profile")
     if (storedProfile) {
-      setProfile(JSON.parse(storedProfile))
+      try {
+        setProfile(JSON.parse(storedProfile))
+      } catch (error) {
+        console.error('Error parsing stored profile:', error)
+        // If parsing fails, just keep current profile
+      }
     }
   }
 
@@ -193,11 +240,8 @@ export default function SeekerProfilePage() {
           <div className="flex min-h-screen w-full">
             <Sidebar className="border-r border-orange-200 bg-white">
               <SidebarHeader>
-                <div className="flex items-center space-x-3 px-4 py-4">
-                  <div className="w-10 h-10 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-                    <Briefcase className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-xl font-bold text-slate-900">SkillConnect</span>
+                <div className="px-4 py-4">
+                  <Logo showTagline={false} />
                 </div>
               </SidebarHeader>
 
@@ -308,7 +352,7 @@ export default function SeekerProfilePage() {
             </Sidebar>
 
             <SidebarInset className="bg-transparent">
-              <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl">
+              <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
                 <SidebarTrigger className="-ml-1 text-slate-700 hover:bg-orange-50 hover:text-orange-600 rounded-xl" />
                 <div className="flex-1">
                   <h1 className="text-lg font-semibold text-slate-900">Profile</h1>

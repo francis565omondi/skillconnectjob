@@ -10,7 +10,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, Shield, Mail, Lock, AlertCircle } from "lucide-react"
 import Link from "next/link"
-import { Logo } from "@/components/logo"
 
 export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -23,12 +22,12 @@ export default function AdminLoginPage() {
 
   // Admin credentials (in production, this would be in a secure database)
   const ADMIN_CREDENTIALS = {
-    email: "admin@skillconnect.co.ke",
+    email: "skillconnect2025@gmail.com",
     password: "admin123!",
     // You can add more admin users here
     alternativeAdmins: [
-      { email: "superadmin@skillconnect.co.ke", password: "super123!" },
-      { email: "moderator@skillconnect.co.ke", password: "mod123!" },
+      { email: "skillconnect2025@gmail.com", password: "super123!" },
+      { email: "skillconnect2025@gmail.com", password: "mod123!" },
     ],
   }
 
@@ -90,8 +89,11 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <Logo />
+          <div className="flex items-center justify-center space-x-2 mb-4">
+            <div className="w-12 h-12 bg-red-600 rounded-lg flex items-center justify-center">
+              <Shield className="w-7 h-7 text-white" />
+            </div>
+            <span className="text-3xl font-bold text-red-600">Admin Access</span>
           </div>
           <h1 className="text-2xl font-bold text-foreground">Administrator Login</h1>
           <p className="text-muted-foreground">Restricted access for authorized personnel only</p>
@@ -154,20 +156,6 @@ export default function AdminLoginPage() {
                 {isLoading ? "Authenticating..." : "Access Admin Dashboard"}
               </Button>
             </form>
-
-            {/* Demo Credentials for Testing */}
-            <div className="mt-6 p-4 bg-red-50 rounded-lg border border-red-200">
-              <p className="text-sm font-medium text-red-800 mb-2">🔐 Demo Admin Credentials:</p>
-              <div className="text-xs text-red-700 space-y-1">
-                <div>
-                  <strong>Email:</strong> admin@skillconnect.co.ke
-                </div>
-                <div>
-                  <strong>Password:</strong> admin123!
-                </div>
-              </div>
-              <p className="text-xs text-red-600 mt-2">⚠️ For development/testing only. Change in production!</p>
-            </div>
 
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">Not an admin? </span>

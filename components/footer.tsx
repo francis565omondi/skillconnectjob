@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Network } from "lucide-react"
+import { Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Network, MessageCircle } from "lucide-react"
 import Link from "next/link"
 
 export function Footer() {
@@ -58,18 +58,42 @@ export function Footer() {
               Connecting talented professionals with amazing opportunities. Your next career move starts here.
             </p>
             <div className="flex space-x-3 sm:space-x-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer">
-                <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              </div>
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer">
-                <Twitter className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              </div>
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer">
-                <Linkedin className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              </div>
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer">
-                <Instagram className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              </div>
+              <a 
+                href="https://www.facebook.com/francislyric1" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer group"
+                aria-label="Follow us on Facebook"
+              >
+                <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-white group-hover:scale-110 transition-transform" />
+              </a>
+              <a 
+                href="https://x.com/FrancisOmo25861" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer group"
+                aria-label="Follow us on Twitter"
+              >
+                <Twitter className="w-4 h-4 sm:w-5 sm:h-5 text-white group-hover:scale-110 transition-transform" />
+              </a>
+              <a 
+                href="https://www.linkedin.com/in/otieno-francis-69a49b235/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer group"
+                aria-label="Follow us on LinkedIn"
+              >
+                <Linkedin className="w-4 h-4 sm:w-5 sm:h-5 text-white group-hover:scale-110 transition-transform" />
+              </a>
+              <a 
+                href="https://www.instagram.com/francislyric1/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-600 rounded-full flex items-center justify-center hover:bg-orange-700 transition-colors cursor-pointer group"
+                aria-label="Follow us on Instagram"
+              >
+                <Instagram className="w-4 h-4 sm:w-5 sm:h-5 text-white group-hover:scale-110 transition-transform" />
+              </a>
             </div>
           </div>
 
@@ -150,19 +174,25 @@ export function Footer() {
                 <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-600 rounded-full flex items-center justify-center">
                   <Mail className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
                 </div>
-                <span className="text-sm sm:text-base text-gray-400">hello@skillconnect.co.ke</span>
+                <a href="mailto:skillconnect2025@gmail.com" className="text-sm sm:text-base text-gray-400 hover:text-orange-500 transition-colors font-semibold">skillconnect2025@gmail.com</a>
               </div>
               <div className="flex items-center space-x-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-600 rounded-full flex items-center justify-center">
                   <Phone className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
                 </div>
-                <span className="text-sm sm:text-base text-gray-400">+254 700 000000</span>
+                <a href="tel:+254111701308" className="text-sm sm:text-base text-gray-400 hover:text-orange-500 transition-colors font-semibold">+254111701308</a>
               </div>
               <div className="flex items-center space-x-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-600 rounded-full flex items-center justify-center">
                   <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
                 </div>
                 <span className="text-sm sm:text-base text-gray-400">Nairobi, Kenya</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-600 rounded-full flex items-center justify-center">
+                  <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                </div>
+                <a href="https://wa.me/254111701308" target="_blank" rel="noopener noreferrer" className="text-sm sm:text-base text-gray-400 hover:text-orange-500 transition-colors font-semibold">WhatsApp</a>
               </div>
             </div>
             <div>
@@ -185,7 +215,12 @@ export function Footer() {
       <div className="border-t border-gray-900">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <div className="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
-            <p className="text-xs sm:text-sm text-gray-400 text-center sm:text-left">© 2024 SkillConnect. All rights reserved.</p>
+            <div className="text-center sm:text-left">
+              <p className="text-xs sm:text-sm text-gray-400">© 2025 SkillConnect. All rights reserved.</p>
+              <p className="text-xs text-gray-500 mt-1">Last updated: July 10, 2025</p>
+              <p className="text-xs text-gray-500 mt-1">By Blessed Adventures</p>
+              <a href="mailto:skillconnect2025@gmail.com" className="text-xs text-gray-400 mt-1 hover:text-orange-500 font-semibold transition-colors">Contact: skillconnect2025@gmail.com</a>
+            </div>
             <div className="flex flex-wrap justify-center sm:justify-end gap-4 sm:gap-6">
               <Link href="/privacy" className="text-xs sm:text-sm text-gray-400 hover:text-orange-500 transition-colors">
                 Privacy Policy
@@ -200,6 +235,9 @@ export function Footer() {
           </div>
         </div>
       </div>
+
+      {/* WhatsApp link style override */}
+      {/* Removed custom WhatsApp color override for consistency */}
     </footer>
   )
 }

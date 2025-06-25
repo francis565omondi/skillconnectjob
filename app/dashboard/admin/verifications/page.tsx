@@ -43,74 +43,75 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { AdminGuard } from "@/components/admin-auth-guard"
+import { supabase } from "@/lib/supabaseClient"
 
 export default function AdminVerificationsPage() {
-  const [verifications, setVerifications] = useState([
-    {
-      id: 1,
-      companyName: "TechStart Solutions",
-      contactPerson: "Jane Doe",
-      email: "jane@techstart.co.ke",
-      phone: "+254 700 123 456",
-      submittedDate: "2024-01-15",
-      documentType: "Business License",
-      status: "pending",
-      documentUrl: "#",
-      notes: "New technology startup seeking verification",
-    },
-    {
-      id: 2,
-      companyName: "BuildCorp Kenya",
-      contactPerson: "John Smith",
-      email: "john@buildcorp.co.ke",
-      phone: "+254 711 234 567",
-      submittedDate: "2024-01-14",
-      documentType: "Business License",
-      status: "pending",
-      documentUrl: "#",
-      notes: "Construction company with 5+ years experience",
-    },
-    {
-      id: 3,
-      companyName: "Digital Innovations Ltd",
-      contactPerson: "Sarah Johnson",
-      email: "sarah@digitalinnovations.co.ke",
-      phone: "+254 722 345 678",
-      submittedDate: "2024-01-13",
-      documentType: "Business License",
-      status: "approved",
-      documentUrl: "#",
-      notes: "Digital marketing agency",
-    },
-    {
-      id: 4,
-      companyName: "Safari Lodge Resort",
-      contactPerson: "Michael Brown",
-      email: "michael@safarilodge.co.ke",
-      phone: "+254 733 456 789",
-      submittedDate: "2024-01-12",
-      documentType: "Business License",
-      status: "rejected",
-      documentUrl: "#",
-      notes: "Incomplete documentation provided",
-    },
-  ])
+  const [verifications, setVerifications] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
 
-  const handleVerificationAction = (id: number, action: "approve" | "reject") => {
-    setVerifications(verifications.map(verification => 
-      verification.id === id 
-        ? { ...verification, status: action === "approve" ? "approved" : "rejected" }
-        : verification
-    ))
+  // Fetch verifications from Supabase
+  useEffect(() => {
+    let subscription: any = null
+    const fetchVerifications = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const { data, error } = await supabase
+          .from('verifications')
+          .select('*')
+          .order('submitted_date', { ascending: false })
+        if (error) throw error
+        setVerifications(data)
+      } catch (err: any) {
+        setError("Failed to load verifications: " + err.message)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchVerifications()
+    // Real-time subscription
+    subscription = supabase
+      .channel('verifications_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, (payload: any) => {
+        fetchVerifications()
+      })
+      .subscribe()
+    return () => {
+      if (subscription) supabase.removeChannel(subscription)
+    }
+  }, [])
+
+  // Approve/Reject verification
+  const handleVerificationAction = async (id: string, action: "approve" | "reject") => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase
+        .from('verifications')
+        .update({ status: action === "approve" ? "approved" : "rejected", updated_at: new Date().toISOString() })
+        .eq('id', id)
+      if (error) throw error
+      // Refresh verifications
+      const { data } = await supabase
+        .from('verifications')
+        .select('*')
+        .order('submitted_date', { ascending: false })
+      setVerifications(data)
+    } catch (err: any) {
+      setError("Failed to update verification: " + err.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const filteredVerifications = verifications.filter((verification) => {
     const matchesSearch =
-      verification.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      verification.contactPerson.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      verification.email.toLowerCase().includes(searchQuery.toLowerCase())
+      verification.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      verification.contact_person?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      verification.email?.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesStatus = statusFilter === "all" || verification.status === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -357,8 +358,8 @@ export default function AdminVerificationsPage() {
                                 <Building className="w-6 h-6 text-orange-600" />
                               </div>
                               <div>
-                                <h3 className="text-lg font-semibold text-slate-900">{verification.companyName}</h3>
-                                <p className="text-slate-600">{verification.contactPerson}</p>
+                                <h3 className="text-lg font-semibold text-slate-900">{verification.company_name}</h3>
+                                <p className="text-slate-600">{verification.contact_person}</p>
                                 <div className="flex items-center space-x-4 text-sm text-slate-500">
                                   <span className="flex items-center">
                                     <Mail className="w-3 h-3 mr-1" />
@@ -366,14 +367,14 @@ export default function AdminVerificationsPage() {
                                   </span>
                                   <span className="flex items-center">
                                     <Calendar className="w-3 h-3 mr-1" />
-                                    Submitted: {verification.submittedDate}
+                                    Submitted: {verification.submitted_date}
                                   </span>
                                 </div>
                               </div>
                             </div>
                             <div className="space-y-2">
                               <p className="text-sm text-slate-600">
-                                <strong>Document Type:</strong> {verification.documentType}
+                                <strong>Document Type:</strong> {verification.document_type}
                               </p>
                               <p className="text-sm text-slate-600">
                                 <strong>Notes:</strong> {verification.notes}

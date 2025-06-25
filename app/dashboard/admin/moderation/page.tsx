@@ -43,68 +43,69 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { AdminGuard } from "@/components/admin-auth-guard"
+import { supabase } from "@/lib/supabaseClient"
 
 export default function AdminModerationPage() {
-  const [flaggedContent, setFlaggedContent] = useState([
-    {
-      id: 1,
-      type: "job",
-      title: "High Paying Remote Work",
-      company: "QuickMoney Ltd",
-      reportedBy: "user123",
-      reason: "Suspicious salary claims",
-      reportedDate: "2024-01-16",
-      status: "pending",
-      description: "Earn $5000 per day working from home. No experience needed!",
-      severity: "high",
-    },
-    {
-      id: 2,
-      type: "job",
-      title: "Easy Money Online",
-      company: "FastCash Inc",
-      reportedBy: "user456",
-      reason: "Potential scam",
-      reportedDate: "2024-01-15",
-      status: "pending",
-      description: "Make money fast with our simple online system",
-      severity: "high",
-    },
-    {
-      id: 3,
-      type: "user",
-      title: "Suspicious User Activity",
-      company: "N/A",
-      reportedBy: "user789",
-      reason: "Multiple fake applications",
-      reportedDate: "2024-01-14",
-      status: "reviewed",
-      description: "User has submitted 50+ applications in one day",
-      severity: "medium",
-    },
-    {
-      id: 4,
-      type: "job",
-      title: "Marketing Specialist",
-      company: "Legit Company",
-      reportedBy: "user101",
-      reason: "Misleading job description",
-      reportedDate: "2024-01-13",
-      status: "resolved",
-      description: "Job description doesn't match actual role",
-      severity: "low",
-    },
-  ])
+  const [flaggedContent, setFlaggedContent] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
 
-  const handleModerationAction = (id: number, action: "approve" | "remove") => {
-    setFlaggedContent(flaggedContent.map(content => 
-      content.id === id 
-        ? { ...content, status: action === "approve" ? "resolved" : "removed" }
-        : content
-    ))
+  // Fetch flagged content from Supabase
+  useEffect(() => {
+    let subscription: any = null
+    const fetchFlaggedContent = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const { data, error } = await supabase
+          .from('flagged_content')
+          .select('*')
+          .order('reported_date', { ascending: false })
+        if (error) throw error
+        setFlaggedContent(data)
+      } catch (err: any) {
+        setError("Failed to load flagged content: " + err.message)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchFlaggedContent()
+    // Real-time subscription
+    subscription = supabase
+      .channel('flagged_content_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'flagged_content' }, (payload: any) => {
+        fetchFlaggedContent()
+      })
+      .subscribe()
+    return () => {
+      if (subscription) supabase.removeChannel(subscription)
+    }
+  }, [])
+
+  // Approve/Remove moderation
+  const handleModerationAction = async (id: string, action: "approve" | "remove") => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase
+        .from('flagged_content')
+        .update({ status: action === "approve" ? "resolved" : "removed", updated_at: new Date().toISOString() })
+        .eq('id', id)
+      if (error) throw error
+      // Refresh flagged content
+      const { data } = await supabase
+        .from('flagged_content')
+        .select('*')
+        .order('reported_date', { ascending: false })
+      setFlaggedContent(data)
+    } catch (err: any) {
+      setError("Failed to update flagged content: " + err.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const getSeverityColor = (severity: string) => {
@@ -122,9 +123,9 @@ export default function AdminModerationPage() {
 
   const filteredContent = flaggedContent.filter((content) => {
     const matchesSearch =
-      content.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      content.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      content.reason.toLowerCase().includes(searchQuery.toLowerCase())
+      content.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      content.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      content.reason?.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesType = typeFilter === "all" || content.type === typeFilter
     const matchesStatus = statusFilter === "all" || content.status === statusFilter
     return matchesSearch && matchesType && matchesStatus

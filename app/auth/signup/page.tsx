@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -45,8 +46,18 @@ export default function SignupPage() {
     role: "seeker",
     agreeToTerms: false,
   })
+  const [redirectUrl, setRedirectUrl] = useState("")
 
+  const searchParams = useSearchParams()
   const { notifications, removeNotification, showSuccess, showError, showLoading } = useStatusManager()
+
+  useEffect(() => {
+    // Get redirect URL from search parameters
+    const redirect = searchParams.get('redirect')
+    if (redirect) {
+      setRedirectUrl(redirect)
+    }
+  }, [searchParams])
 
   // Password strength validation
   const validatePassword = (password: string) => {
@@ -104,17 +115,6 @@ export default function SignupPage() {
     return phoneRegex.test(phone.replace(/\s/g, ''))
   }
 
-  // Simple API call simulation
-  const simulateApiCall = async (callback: () => any, delay: number = 1000) => {
-    try {
-      await new Promise(resolve => setTimeout(resolve, delay))
-      const result = callback()
-      return { status: "success", data: result }
-    } catch (error) {
-      return { status: "error", message: error.message }
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -148,44 +148,87 @@ export default function SignupPage() {
     showLoading("Creating your account...", "Please wait while we set up your profile")
 
     try {
-      // First, check if email already exists
-      console.log('Checking email existence for:', formData.email.toLowerCase().trim())
-      
-      const { data: existingUsers, error: checkError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('email', formData.email.toLowerCase().trim())
-        .limit(1)
+      // Use Supabase Auth to create user with email verification
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email.toLowerCase().trim(),
+        password: formData.password,
+        options: {
+          data: {
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            phone: formData.phone.replace(/\s/g, ''),
+            role: formData.role,
+          },
+          emailRedirectTo: `${window.location.origin}/auth/verify-email`
+        }
+      })
 
-      console.log('Email check result:', { existingUsers, checkError })
-
-      if (checkError) {
-        console.error('Error checking email:', checkError)
-        console.error('Error details:', {
-          message: checkError.message,
-          code: checkError.code,
-          details: checkError.details,
-          hint: checkError.hint
-        })
-        showError("Registration failed", `An error occurred while checking email availability: ${checkError.message}`)
+      if (authError) {
+        console.error('Auth error:', authError)
+        if (authError.message.includes('already registered')) {
+          showError("Email already registered", "This email address is already associated with an account. Please use a different email or try logging in.")
+        } else {
+          showError("Registration failed", `Error: ${authError.message}`)
+        }
         return
       }
 
-      if (existingUsers && existingUsers.length > 0) {
-        showError("Email already registered", "This email address is already associated with an account. Please use a different email or try logging in.")
-        return
+      if (authData.user && !authData.user.email_confirmed_at) {
+        // User created but email not confirmed
+        showSuccess(
+          "Account created successfully!", 
+          "Please check your email and click the verification link to activate your account before logging in."
+        )
+        
+        // Store user data temporarily for email verification page
+        sessionStorage.setItem("pending_verification", JSON.stringify({
+          email: formData.email.toLowerCase().trim(),
+          role: formData.role,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          redirectUrl: redirectUrl // Store redirect URL for after verification
+        }))
+        
+        // Redirect to email verification page
+        setTimeout(() => {
+          window.location.href = "/auth/verify-email"
+        }, 2000)
+      } else {
+        // Email already confirmed (unlikely but possible)
+        showSuccess("Account created successfully!", "Redirecting...")
+        
+        // Create profile in profiles table
+        await createUserProfile(authData.user!)
+        
+        // After successful signup, update sessionStorage
+        sessionStorage.setItem("skillconnect_session", JSON.stringify({ ...sessionData, lastLogin: Date.now() }));
+        
+        setTimeout(() => {
+          if (redirectUrl) {
+            window.location.href = redirectUrl
+          } else if (formData.role === "admin") {
+            window.location.href = "/dashboard/admin"
+          } else if (formData.role === "employer") {
+            window.location.href = "/dashboard/employer"
+          } else {
+            window.location.href = "/dashboard/seeker"
+          }
+        }, 2000)
       }
+    } catch (error) {
+      console.error('Error during registration:', error)
+      showError("Registration failed", "An unexpected error occurred. Please try again.")
+    }
+  }
 
-      console.log('Email is available, proceeding with user creation...')
-
-      // Create user data with proper structure
-      const newUser = {
-        id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  const createUserProfile = async (user: any) => {
+    try {
+      const profileData = {
+        id: user.id,
         first_name: formData.firstName,
         last_name: formData.lastName,
-        email: formData.email.toLowerCase().trim(), // Normalize email
-        phone: formData.phone.replace(/\s/g, ''), // Remove spaces from phone
-        password: formData.password, // Store password for authentication
+        email: formData.email.toLowerCase().trim(),
+        phone: formData.phone.replace(/\s/g, ''),
         role: formData.role,
         created_at: new Date().toISOString(),
         last_login: new Date().toISOString(),
@@ -206,86 +249,56 @@ export default function SignupPage() {
         }),
       }
 
-      // Save to Supabase
-      console.log('Attempting to create user with data:', { ...newUser, password: '[HIDDEN]' })
-      
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('profiles')
-        .insert([newUser])
-        .select()
-
-      console.log('User creation result:', { data, error })
+        .insert([profileData])
 
       if (error) {
-        console.error('Error creating user:', error)
-        console.error('Error details:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        })
-        if (error.code === '23505') { // PostgreSQL unique constraint violation
-          showError("Email already registered", "This email address is already associated with an account. Please use a different email or try logging in.")
-        } else {
-          showError("Registration failed", `Error: ${error.message}`)
-        }
-        return
+        console.error('Error creating profile:', error.message || error)
+        throw error
       }
-
-      // Store user data in localStorage for session management
-      localStorage.setItem("skillconnect_user", JSON.stringify(newUser))
-      
-      // Create session data for immediate access
-      const session = {
-        userId: newUser.id,
-        email: newUser.email,
-        role: newUser.role,
-        firstName: newUser.first_name,
-        lastName: newUser.last_name,
-        loginTime: new Date().toISOString(),
-      }
-      
-      // Store session in sessionStorage
-      sessionStorage.setItem("skillconnect_session", JSON.stringify(session))
-      
-      showSuccess("Account created successfully!", "Redirecting to your dashboard...")
-      
-      // Redirect to appropriate dashboard based on role
-      setTimeout(() => {
-        if (newUser.role === "admin") {
-          window.location.href = "/dashboard/admin"
-        } else if (newUser.role === "employer") {
-          window.location.href = "/dashboard/employer"
-        } else {
-          window.location.href = "/dashboard/seeker"
-        }
-      }, 2000)
     } catch (error) {
-      console.error('Error during registration:', error)
-      showError("Registration failed", "An unexpected error occurred. Please try again.")
+      console.error('Error creating user profile:', error instanceof Error ? error.message : error)
+      throw error
     }
   }
 
-  const handleGoogleSignup = () => {
-    showError("Google Signup", "Google OAuth integration is not available in this demo")
+  const handleGoogleSignup = async () => {
+    showLoading("Connecting to Google...", "Please wait while we authenticate with Google")
+
+    try {
+      // Start Google OAuth flow with Supabase
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectUrl || '')}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        }
+      })
+
+      if (error) {
+        console.error('Google OAuth error:', error)
+        showError("Google Signup Failed", error.message || "Failed to connect with Google. Please try again.")
+        return
+      }
+
+      // The user will be redirected to Google for authentication
+      // After successful authentication, they'll be redirected back to /auth/callback
+      console.log('Google OAuth initiated:', data)
+      
+    } catch (error) {
+      console.error('Google signup error:', error)
+      showError("Google Signup Failed", "An unexpected error occurred. Please try again.")
+    }
   }
 
   return (
     <div className="min-h-screen bg-light-gradient">
       <StatusManager notifications={notifications} onRemove={removeNotification} />
       
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-orange-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <Logo />
-            <Link href="/auth/login" className="btn-secondary px-6 py-2">
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </div>
-
       <div className="section-simple flex items-center justify-center px-4">
         <div className="w-full max-w-md">
           {/* Welcome Section */}
@@ -295,7 +308,7 @@ export default function SignupPage() {
               <span className="text-orange-800 text-sm font-medium">Join Our Community</span>
             </div>
 
-            <h1 className="heading-lg text-slate-900 mb-2">Create Your Account</h1>
+            <h1 className="text-2xl font-semibold text-center mb-4">Create Your Account</h1>
             <p className="text-simple text-slate-600">Join thousands of professionals in Kenya</p>
           </div>
 

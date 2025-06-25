@@ -126,7 +126,13 @@ function SettingsPageContent() {
         const userData = localStorage.getItem("skillconnect_user")
         if (!userData) return
         
-        const user = JSON.parse(userData)
+        let user
+        try {
+          user = JSON.parse(userData)
+        } catch (parseError) {
+          console.error('Error parsing user data from localStorage:', parseError)
+          return
+        }
         
         // Fetch user profile from database
         const { data: profileData, error } = await supabase
@@ -940,7 +946,7 @@ function SettingsPageContent() {
           </Sidebar>
 
           <SidebarInset className="bg-transparent">
-            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl">
+            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
               <SidebarTrigger className="-ml-1 text-slate-700 hover:bg-orange-50 hover:text-orange-600 rounded-xl" />
               <div className="flex-1">
                 <h1 className="text-lg font-semibold text-slate-900">Settings</h1>

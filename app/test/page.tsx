@@ -1,43 +1,89 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function TestPage() {
-  const [testState, setTestState] = useState("Test page is working!")
+  const [sessionData, setSessionData] = useState<any>(null)
+  const [userData, setUserData] = useState<any>(null)
+
+  useEffect(() => {
+    // Check session storage
+    const session = sessionStorage.getItem("skillconnect_session")
+    if (session) {
+      setSessionData(JSON.parse(session))
+    }
+
+    // Check local storage
+    const user = localStorage.getItem("skillconnect_user")
+    if (user) {
+      setUserData(JSON.parse(user))
+    }
+  }, [])
+
+  const testRedirect = () => {
+    const redirectUrl = "/jobs/test-job-id/apply"
+    console.log('Testing redirect to:', redirectUrl)
+    window.location.href = `/auth/login?redirect=${encodeURIComponent(redirectUrl)}`
+  }
+
+  const clearSession = () => {
+    sessionStorage.removeItem("skillconnect_session")
+    localStorage.removeItem("skillconnect_user")
+    setSessionData(null)
+    setUserData(null)
+  }
 
   return (
-    <div className="min-h-screen bg-light-gradient flex items-center justify-center p-4">
-      <Card className="simple-card w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-center text-slate-900">Test Page</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-center text-slate-600">{testState}</p>
-          <Button 
-            onClick={() => setTestState("Button clicked! " + new Date().toLocaleTimeString())}
-            className="w-full btn-primary"
-          >
-            Test Button
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8">Redirect Test Page</h1>
+        
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Session Storage</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="bg-gray-100 p-4 rounded text-sm overflow-auto">
+                {sessionData ? JSON.stringify(sessionData, null, 2) : 'No session data'}
+              </pre>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Local Storage</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="bg-gray-100 p-4 rounded text-sm overflow-auto">
+                {userData ? JSON.stringify(userData, null, 2) : 'No user data'}
+              </pre>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="mt-8 space-y-4">
+          <Button onClick={testRedirect} className="mr-4">
+            Test Redirect to Login
           </Button>
-          <div className="space-y-2">
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/">Go to Home</Link>
-            </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/dashboard/employer">Go to Employer Dashboard</Link>
-            </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/dashboard/seeker">Go to Seeker Dashboard</Link>
-            </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/dashboard/admin">Go to Admin Dashboard</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          
+          <Button onClick={clearSession} variant="outline">
+            Clear Session
+          </Button>
+        </div>
+
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold mb-4">Test Instructions:</h2>
+          <ol className="list-decimal list-inside space-y-2">
+            <li>Click "Test Redirect to Login" to simulate clicking Apply Now</li>
+            <li>You should be redirected to login page with redirect parameter</li>
+            <li>After login, you should be redirected back to the application form</li>
+            <li>Check the browser console for debugging information</li>
+          </ol>
+        </div>
+      </div>
     </div>
   )
 } 

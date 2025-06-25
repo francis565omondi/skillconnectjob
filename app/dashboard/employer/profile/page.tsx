@@ -43,6 +43,7 @@ import {
 import Link from "next/link"
 import { EmployerGuard } from "@/components/admin-auth-guard"
 import { supabase } from "@/lib/supabaseClient"
+import { Logo } from "@/components/logo"
 
 interface UserSession {
   firstName: string;
@@ -63,6 +64,8 @@ export default function EmployerProfilePage() {
     companySize: "",
     description: "",
   })
+  const [companyImage, setCompanyImage] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     const loadUserProfile = async () => {
@@ -84,6 +87,7 @@ export default function EmployerProfilePage() {
             companySize: user.company_size || "",
             description: user.description || "",
           })
+          setCompanyImage(user.company_image || null)
         }
       } catch (error) {
         console.error('Error loading user profile:', error)
@@ -114,6 +118,7 @@ export default function EmployerProfilePage() {
           phone: profile.phone,
           description: profile.about,
           company_size: profile.companySize,
+          company_image: companyImage,
         })
         .eq('id', user.id)
 
@@ -121,8 +126,20 @@ export default function EmployerProfilePage() {
         console.error('Error updating profile:', error)
         alert('Failed to update profile. Please try again.')
       } else {
-        // Update local storage
-        const updatedUser = { ...user, ...profile }
+        // Update local storage with both old and new field names for compatibility
+        const updatedUser = { 
+          ...user, 
+          company_name: profile.companyName,
+          companyName: profile.companyName,
+          industry: profile.industry,
+          location: profile.location,
+          website: profile.website,
+          phone: profile.phone,
+          description: profile.about,
+          company_size: profile.companySize,
+          companySize: profile.companySize,
+          company_image: companyImage,
+        }
         localStorage.setItem("skillconnect_user", JSON.stringify(updatedUser))
         
         setIsEditing(false)
@@ -141,11 +158,8 @@ export default function EmployerProfilePage() {
           <div className="flex min-h-screen w-full">
             <Sidebar className="border-r border-orange-200 bg-white">
               <SidebarHeader>
-                <div className="flex items-center space-x-3 px-4 py-4">
-                  <div className="w-10 h-10 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-                    <Building className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-xl font-bold text-slate-900">SkillConnect</span>
+                <div className="px-4 py-4">
+                  <Logo showTagline={false} />
                 </div>
               </SidebarHeader>
 
@@ -245,29 +259,6 @@ export default function EmployerProfilePage() {
             </Sidebar>
 
             <SidebarInset className="bg-transparent">
-              <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl">
-                <SidebarTrigger className="-ml-1 text-slate-700 hover:bg-orange-50 hover:text-orange-600 rounded-xl" />
-                <div className="flex-1">
-                  <h1 className="text-lg font-semibold text-slate-900">Company Profile</h1>
-                </div>
-                {isEditing ? (
-                  <div className="flex gap-2">
-                    <Button onClick={handleSave} className="btn-primary">
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Changes
-                    </Button>
-                    <Button onClick={() => setIsEditing(false)} variant="outline">
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <Button onClick={() => setIsEditing(true)} className="btn-primary">
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Profile
-                  </Button>
-                )}
-              </header>
-
               <main className="flex-1 space-y-8 p-6 scroll-simple">
                 {isLoading ? (
                   <div className="text-center py-8">
@@ -281,13 +272,66 @@ export default function EmployerProfilePage() {
                       <Card className="simple-card">
                         <CardContent className="p-6 text-center">
                           <div className="relative inline-block mb-4">
-                            <div className="w-32 h-32 bg-orange-500 rounded-full flex items-center justify-center text-white text-4xl font-bold">
-                              <Building className="w-16 h-16" />
+                            <div className="w-32 h-32 bg-orange-500 rounded-full flex items-center justify-center text-white text-4xl font-bold overflow-hidden">
+                              {companyImage ? (
+                                <img
+                                  src={companyImage}
+                                  alt="Company Logo"
+                                  className="w-32 h-32 rounded-full object-cover"
+                                />
+                              ) : (
+                                <Building className="w-16 h-16" />
+                              )}
+                              {uploading && (
+                                <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded-full">
+                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+                                </div>
+                              )}
                             </div>
                             {isEditing && (
-                              <button className="absolute bottom-0 right-0 w-10 h-10 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-orange-600 hover:bg-white transition-colors border border-orange-200">
+                              <label className="absolute bottom-0 right-0 w-10 h-10 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-orange-600 hover:bg-white transition-colors border border-orange-200 cursor-pointer">
                                 <Camera className="w-5 h-5" />
-                              </button>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0]
+                                    if (!file) return
+                                    setUploading(true)
+                                    try {
+                                      const fileExt = file.name.split('.').pop()
+                                      const fileName = `company_${user.id}_${Date.now()}.${fileExt}`
+                                      const { data, error } = await supabase.storage.from('company-logos').upload(fileName, file, { upsert: true })
+                                      if (error) throw error
+                                      const { data: publicUrlData } = supabase.storage.from('company-logos').getPublicUrl(fileName)
+                                      const newImageUrl = publicUrlData.publicUrl
+                                      setCompanyImage(newImageUrl)
+                                      
+                                      // Update database immediately
+                                      const { error: dbError } = await supabase
+                                        .from('profiles')
+                                        .update({ company_image: newImageUrl })
+                                        .eq('id', user.id)
+                                      
+                                      if (dbError) {
+                                        console.error('Error updating database:', dbError)
+                                        alert('Image uploaded but failed to save to profile. Please try again.')
+                                      } else {
+                                        // Update local storage
+                                        const updatedUser = { ...user, company_image: newImageUrl }
+                                        localStorage.setItem("skillconnect_user", JSON.stringify(updatedUser))
+                                        alert('Company logo updated successfully!')
+                                      }
+                                    } catch (err) {
+                                      console.error('Error uploading image:', err)
+                                      alert('Failed to upload image')
+                                    } finally {
+                                      setUploading(false)
+                                    }
+                                  }}
+                                />
+                              </label>
                             )}
                           </div>
                           <h3 className="text-2xl font-bold text-slate-900 mb-1">

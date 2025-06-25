@@ -40,53 +40,17 @@ import {
   AlertTriangle,
   CheckCircle,
   Info,
+  FileText,
 } from "lucide-react"
 import Link from "next/link"
 import { AdminGuard } from "@/components/admin-auth-guard"
+import { supabase } from "@/lib/supabaseClient"
+import { AIServices } from "@/lib/aiServices"
 
 export default function AdminNotificationsPage() {
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: "New User Registration",
-      message: "A new employer has registered and requires verification",
-      type: "info",
-      priority: "medium",
-      timestamp: "2024-01-16T10:30:00Z",
-      read: false,
-      actionRequired: true,
-    },
-    {
-      id: 2,
-      title: "System Alert",
-      message: "Database backup completed successfully",
-      type: "success",
-      priority: "low",
-      timestamp: "2024-01-16T09:15:00Z",
-      read: true,
-      actionRequired: false,
-    },
-    {
-      id: 3,
-      title: "Content Flagged",
-      message: "A job posting has been flagged for review",
-      type: "warning",
-      priority: "high",
-      timestamp: "2024-01-16T08:45:00Z",
-      read: false,
-      actionRequired: true,
-    },
-    {
-      id: 4,
-      title: "Security Alert",
-      message: "Multiple failed login attempts detected",
-      type: "error",
-      priority: "high",
-      timestamp: "2024-01-16T07:20:00Z",
-      read: false,
-      actionRequired: true,
-    },
-  ])
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [showCompose, setShowCompose] = useState(false)
@@ -98,37 +62,111 @@ export default function AdminNotificationsPage() {
     targetAudience: "all",
   })
 
-  const markAsRead = (id: number) => {
-    setNotifications(notifications.map(notif => 
-      notif.id === id ? { ...notif, read: true } : notif
-    ))
-  }
-
-  const deleteNotification = (id: number) => {
-    setNotifications(notifications.filter(notif => notif.id !== id))
-  }
-
-  const sendNotification = () => {
-    if (newNotification.title && newNotification.message) {
-      const notification = {
-        id: Date.now(),
-        title: newNotification.title,
-        message: newNotification.message,
-        type: newNotification.type,
-        priority: newNotification.priority,
-        timestamp: new Date().toISOString(),
-        read: false,
-        actionRequired: false,
+  // Fetch notifications from Supabase
+  useEffect(() => {
+    let subscription: any = null
+    const fetchNotifications = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('timestamp', { ascending: false })
+        if (error) throw error
+        setNotifications(data)
+      } catch (err: any) {
+        setError("Failed to load notifications: " + err.message)
+      } finally {
+        setIsLoading(false)
       }
-      setNotifications([notification, ...notifications])
-      setNewNotification({
-        title: "",
-        message: "",
-        type: "info",
-        priority: "medium",
-        targetAudience: "all",
+    }
+    fetchNotifications()
+    // Real-time subscription
+    subscription = supabase
+      .channel('notifications_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload: any) => {
+        fetchNotifications()
       })
-      setShowCompose(false)
+      .subscribe()
+    return () => {
+      if (subscription) supabase.removeChannel(subscription)
+    }
+  }, [])
+
+  // Mark as read in Supabase
+  const markAsRead = async (id: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', id)
+      if (error) throw error
+      setNotifications(notifications.map(notif => notif.id === id ? { ...notif, read: true } : notif))
+    } catch (err: any) {
+      setError("Failed to mark as read: " + err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Delete notification in Supabase
+  const deleteNotification = async (id: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+      setNotifications(notifications.filter(notif => notif.id !== id))
+    } catch (err: any) {
+      setError("Failed to delete notification: " + err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Send notification with AI moderation
+  const sendNotification = async () => {
+    if (newNotification.title && newNotification.message) {
+      setIsLoading(true)
+      setError(null)
+      try {
+        // AI moderation
+        const aiResult = await AIServices.moderateContent(newNotification.message, 'application')
+        if (!aiResult.isAppropriate) {
+          setError('AI flagged this message: ' + aiResult.flags.join(', '))
+          setIsLoading(false)
+          return
+        }
+        // Insert into Supabase
+        const { error } = await supabase
+          .from('notifications')
+          .insert([{ ...newNotification, timestamp: new Date().toISOString(), read: false, action_required: false }])
+        if (error) throw error
+        // Refresh notifications
+        const { data } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('timestamp', { ascending: false })
+        setNotifications(data)
+        setNewNotification({
+          title: "",
+          message: "",
+          type: "info",
+          priority: "medium",
+          targetAudience: "all",
+        })
+        setShowCompose(false)
+      } catch (err: any) {
+        setError("Failed to send notification: " + err.message)
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 

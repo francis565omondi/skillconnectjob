@@ -63,12 +63,12 @@ import {
   Languages,
   Monitor,
   Cpu,
-  Memory,
   HardDrive as Storage,
   Network,
 } from "lucide-react"
 import Link from "next/link"
 import { AdminGuard } from "@/components/admin-auth-guard"
+import { supabase } from "@/lib/supabaseClient"
 
 type SettingsSection = "general" | "security" | "notifications" | "integrations" | "maintenance" | "users" | "system" | "backup" | "advanced"
 
@@ -76,123 +76,84 @@ export default function AdminSettingsPage() {
   const [activeSection, setActiveSection] = useState<SettingsSection>("general")
   const [isLoading, setIsLoading] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [error, setError] = useState<string | null>(null)
 
   // General Settings State
-  const [generalSettings, setGeneralSettings] = useState({
-    siteName: "SkillConnect",
-    siteDescription: "Connecting skilled professionals with great opportunities",
-    contactEmail: "admin@skillconnect.co.ke",
-    supportEmail: "support@skillconnect.co.ke",
-    timezone: "Africa/Nairobi",
-    language: "en",
-    maintenanceMode: false,
-    siteTheme: "light",
-    enableRegistration: true,
-    requireApproval: false,
-  })
-
+  const [generalSettings, setGeneralSettings] = useState<any>(null)
   // Security Settings State
-  const [securitySettings, setSecuritySettings] = useState({
-    requireEmailVerification: true,
-    requirePhoneVerification: false,
-    maxLoginAttempts: 5,
-    sessionTimeout: 24,
-    enableTwoFactor: false,
-    passwordMinLength: 8,
-    requireStrongPasswords: true,
-    enableCaptcha: true,
-    enableRateLimiting: true,
-    allowedFileTypes: ["pdf", "doc", "docx", "jpg", "png"],
-    maxFileSize: 5,
-  })
-
+  const [securitySettings, setSecuritySettings] = useState<any>(null)
   // Notification Settings State
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    smsNotifications: false,
-    adminAlerts: true,
-    userAlerts: true,
-    systemAlerts: true,
-    emailTemplate: "default",
-    notificationFrequency: "immediate",
-  })
-
+  const [notificationSettings, setNotificationSettings] = useState<any>(null)
   // Integration Settings State
-  const [integrationSettings, setIntegrationSettings] = useState({
-    enableEmailService: true,
-    enableSmsService: false,
-    enableAnalytics: true,
-    enableBackup: true,
-    backupFrequency: "daily",
-    enableApiAccess: false,
-    apiRateLimit: 1000,
-    enableWebhooks: false,
-  })
-
+  const [integrationSettings, setIntegrationSettings] = useState<any>(null)
   // User Management Settings
-  const [userSettings, setUserSettings] = useState({
-    defaultUserRole: "seeker",
-    autoApproveUsers: false,
-    requireProfileCompletion: true,
-    allowProfileEditing: true,
-    maxApplicationsPerJob: 50,
-    jobPostingLimit: 10,
-    enableUserDeletion: false,
-    dataRetentionDays: 365,
-  })
-
+  const [userSettings, setUserSettings] = useState<any>(null)
   // System Monitoring
-  const [systemStats, setSystemStats] = useState({
-    cpuUsage: 45,
-    memoryUsage: 62,
-    storageUsage: 78,
-    networkUsage: 23,
-    activeUsers: 1250,
-    totalJobs: 3420,
-    totalApplications: 15600,
-    systemUptime: "99.8%",
-  })
-
+  const [systemStats, setSystemStats] = useState<any>(null)
   // Backup Settings
-  const [backupSettings, setBackupSettings] = useState({
-    autoBackup: true,
-    backupFrequency: "daily",
-    retentionPeriod: 30,
-    includeFiles: true,
-    includeDatabase: true,
-    backupLocation: "cloud",
-    encryptionEnabled: true,
-    lastBackup: "2024-01-15 02:30:00",
-    nextBackup: "2024-01-16 02:30:00",
-  })
-
+  const [backupSettings, setBackupSettings] = useState<any>(null)
   // Advanced Settings
-  const [advancedSettings, setAdvancedSettings] = useState({
-    debugMode: false,
-    logLevel: "info",
-    cacheEnabled: true,
-    cacheDuration: 3600,
-    enableCdn: true,
-    enableCompression: true,
-    enableGzip: true,
-    maxUploadSize: 10,
-    sessionStorage: "database",
-    enableAuditLog: true,
-  })
+  const [advancedSettings, setAdvancedSettings] = useState<any>(null)
 
+  // Fetch settings from Supabase on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const keys = [
+          "general", "security", "notifications", "integrations", "users", "system", "backup", "advanced"
+        ]
+        const { data, error } = await supabase
+          .from("settings")
+          .select("key, value")
+          .in("key", keys)
+        if (error) throw error
+        const settingsMap = Object.fromEntries(data.map((row: any) => [row.key, row.value]))
+        setGeneralSettings(settingsMap.general || {})
+        setSecuritySettings(settingsMap.security || {})
+        setNotificationSettings(settingsMap.notifications || {})
+        setIntegrationSettings(settingsMap.integrations || {})
+        setUserSettings(settingsMap.users || {})
+        setSystemStats(settingsMap.system || {})
+        setBackupSettings(settingsMap.backup || {})
+        setAdvancedSettings(settingsMap.advanced || {})
+      } catch (err: any) {
+        setError("Failed to load settings: " + err.message)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchSettings()
+  }, [])
+
+  // Save handler
   const handleSave = async (section: SettingsSection) => {
     setIsLoading(true)
     setSaveStatus("saving")
-    
+    setError(null)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
+      let value
+      switch (section) {
+        case "general": value = generalSettings; break
+        case "security": value = securitySettings; break
+        case "notifications": value = notificationSettings; break
+        case "integrations": value = integrationSettings; break
+        case "users": value = userSettings; break
+        case "system": value = systemStats; break
+        case "backup": value = backupSettings; break
+        case "advanced": value = advancedSettings; break
+        default: value = {}
+      }
+      const { error } = await supabase
+        .from("settings")
+        .upsert([{ key: section, value }], { onConflict: "key" })
+      if (error) throw error
       setSaveStatus("saved")
       setTimeout(() => setSaveStatus("idle"), 3000)
-    } catch (error) {
+    } catch (err: any) {
       setSaveStatus("error")
+      setError("Failed to save settings: " + err.message)
       setTimeout(() => setSaveStatus("idle"), 3000)
     } finally {
       setIsLoading(false)
@@ -231,15 +192,16 @@ export default function AdminSettingsPage() {
                   <Label htmlFor="siteName">Site Name</Label>
                   <Input
                     id="siteName"
-                    value={generalSettings.siteName}
+                    value={generalSettings?.siteName}
                     onChange={(e) => setGeneralSettings({...generalSettings, siteName: e.target.value})}
-                    className="form-input"
+                    className="form-input bg-white"
+                    placeholder="Enter site name"
                   />
                 </div>
                 <div>
                   <Label htmlFor="timezone">Timezone</Label>
-                  <Select value={generalSettings.timezone} onValueChange={(value) => setGeneralSettings({...generalSettings, timezone: value})}>
-                    <SelectTrigger className="form-input">
+                  <Select value={generalSettings?.timezone} onValueChange={(value) => setGeneralSettings({...generalSettings, timezone: value})}>
+                    <SelectTrigger className="form-input bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -255,10 +217,11 @@ export default function AdminSettingsPage() {
                 <Label htmlFor="siteDescription">Site Description</Label>
                 <Textarea
                   id="siteDescription"
-                  value={generalSettings.siteDescription}
+                  value={generalSettings?.siteDescription}
                   onChange={(e) => setGeneralSettings({...generalSettings, siteDescription: e.target.value})}
-                  className="form-input"
+                  className="form-input bg-white"
                   rows={3}
+                  placeholder="Enter site description"
                 />
               </div>
 
@@ -268,9 +231,10 @@ export default function AdminSettingsPage() {
                   <Input
                     id="contactEmail"
                     type="email"
-                    value={generalSettings.contactEmail}
+                    value={generalSettings?.contactEmail}
                     onChange={(e) => setGeneralSettings({...generalSettings, contactEmail: e.target.value})}
-                    className="form-input"
+                    className="form-input bg-white"
+                    placeholder="Enter contact email"
                   />
                 </div>
                 <div>
@@ -278,9 +242,10 @@ export default function AdminSettingsPage() {
                   <Input
                     id="supportEmail"
                     type="email"
-                    value={generalSettings.supportEmail}
+                    value={generalSettings?.supportEmail}
                     onChange={(e) => setGeneralSettings({...generalSettings, supportEmail: e.target.value})}
-                    className="form-input"
+                    className="form-input bg-white"
+                    placeholder="Enter support email"
                   />
                 </div>
               </div>
@@ -288,8 +253,8 @@ export default function AdminSettingsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="siteTheme">Site Theme</Label>
-                  <Select value={generalSettings.siteTheme} onValueChange={(value) => setGeneralSettings({...generalSettings, siteTheme: value})}>
-                    <SelectTrigger className="form-input">
+                  <Select value={generalSettings?.siteTheme} onValueChange={(value) => setGeneralSettings({...generalSettings, siteTheme: value})}>
+                    <SelectTrigger className="form-input bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -301,8 +266,8 @@ export default function AdminSettingsPage() {
                 </div>
                 <div>
                   <Label htmlFor="language">Default Language</Label>
-                  <Select value={generalSettings.language} onValueChange={(value) => setGeneralSettings({...generalSettings, language: value})}>
-                    <SelectTrigger className="form-input">
+                  <Select value={generalSettings?.language} onValueChange={(value) => setGeneralSettings({...generalSettings, language: value})}>
+                    <SelectTrigger className="form-input bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -318,7 +283,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="maintenanceMode"
-                    checked={generalSettings.maintenanceMode}
+                    checked={generalSettings?.maintenanceMode}
                     onCheckedChange={(checked) => setGeneralSettings({...generalSettings, maintenanceMode: checked})}
                   />
                   <Label htmlFor="maintenanceMode">Maintenance Mode</Label>
@@ -326,7 +291,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="enableRegistration"
-                    checked={generalSettings.enableRegistration}
+                    checked={generalSettings?.enableRegistration}
                     onCheckedChange={(checked) => setGeneralSettings({...generalSettings, enableRegistration: checked})}
                   />
                   <Label htmlFor="enableRegistration">Enable User Registration</Label>
@@ -334,7 +299,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="requireApproval"
-                    checked={generalSettings.requireApproval}
+                    checked={generalSettings?.requireApproval}
                     onCheckedChange={(checked) => setGeneralSettings({...generalSettings, requireApproval: checked})}
                   />
                   <Label htmlFor="requireApproval">Require Admin Approval for New Users</Label>
@@ -381,9 +346,10 @@ export default function AdminSettingsPage() {
                   <Input
                     id="maxLoginAttempts"
                     type="number"
-                    value={securitySettings.maxLoginAttempts}
+                    value={securitySettings?.maxLoginAttempts}
                     onChange={(e) => setSecuritySettings({...securitySettings, maxLoginAttempts: parseInt(e.target.value)})}
-                    className="form-input"
+                    className="form-input bg-white"
+                    placeholder="Enter max login attempts"
                   />
                 </div>
                 <div>
@@ -391,9 +357,10 @@ export default function AdminSettingsPage() {
                   <Input
                     id="sessionTimeout"
                     type="number"
-                    value={securitySettings.sessionTimeout}
+                    value={securitySettings?.sessionTimeout}
                     onChange={(e) => setSecuritySettings({...securitySettings, sessionTimeout: parseInt(e.target.value)})}
-                    className="form-input"
+                    className="form-input bg-white"
+                    placeholder="Enter session timeout in hours"
                   />
                 </div>
               </div>
@@ -404,9 +371,10 @@ export default function AdminSettingsPage() {
                   <Input
                     id="passwordMinLength"
                     type="number"
-                    value={securitySettings.passwordMinLength}
+                    value={securitySettings?.passwordMinLength}
                     onChange={(e) => setSecuritySettings({...securitySettings, passwordMinLength: parseInt(e.target.value)})}
-                    className="form-input"
+                    className="form-input bg-white"
+                    placeholder="Enter minimum password length"
                   />
                 </div>
                 <div>
@@ -414,9 +382,10 @@ export default function AdminSettingsPage() {
                   <Input
                     id="maxFileSize"
                     type="number"
-                    value={securitySettings.maxFileSize}
+                    value={securitySettings?.maxFileSize}
                     onChange={(e) => setSecuritySettings({...securitySettings, maxFileSize: parseInt(e.target.value)})}
-                    className="form-input"
+                    className="form-input bg-white"
+                    placeholder="Enter max file upload size in MB"
                   />
                 </div>
               </div>
@@ -425,7 +394,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="requireEmailVerification"
-                    checked={securitySettings.requireEmailVerification}
+                    checked={securitySettings?.requireEmailVerification}
                     onCheckedChange={(checked) => setSecuritySettings({...securitySettings, requireEmailVerification: checked})}
                   />
                   <Label htmlFor="requireEmailVerification">Require Email Verification</Label>
@@ -433,7 +402,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="requirePhoneVerification"
-                    checked={securitySettings.requirePhoneVerification}
+                    checked={securitySettings?.requirePhoneVerification}
                     onCheckedChange={(checked) => setSecuritySettings({...securitySettings, requirePhoneVerification: checked})}
                   />
                   <Label htmlFor="requirePhoneVerification">Require Phone Verification</Label>
@@ -441,7 +410,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="enableTwoFactor"
-                    checked={securitySettings.enableTwoFactor}
+                    checked={securitySettings?.enableTwoFactor}
                     onCheckedChange={(checked) => setSecuritySettings({...securitySettings, enableTwoFactor: checked})}
                   />
                   <Label htmlFor="enableTwoFactor">Enable Two-Factor Authentication</Label>
@@ -449,7 +418,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="requireStrongPasswords"
-                    checked={securitySettings.requireStrongPasswords}
+                    checked={securitySettings?.requireStrongPasswords}
                     onCheckedChange={(checked) => setSecuritySettings({...securitySettings, requireStrongPasswords: checked})}
                   />
                   <Label htmlFor="requireStrongPasswords">Require Strong Passwords</Label>
@@ -457,7 +426,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="enableCaptcha"
-                    checked={securitySettings.enableCaptcha}
+                    checked={securitySettings?.enableCaptcha}
                     onCheckedChange={(checked) => setSecuritySettings({...securitySettings, enableCaptcha: checked})}
                   />
                   <Label htmlFor="enableCaptcha">Enable CAPTCHA</Label>
@@ -465,7 +434,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="enableRateLimiting"
-                    checked={securitySettings.enableRateLimiting}
+                    checked={securitySettings?.enableRateLimiting}
                     onCheckedChange={(checked) => setSecuritySettings({...securitySettings, enableRateLimiting: checked})}
                   />
                   <Label htmlFor="enableRateLimiting">Enable Rate Limiting</Label>
@@ -512,9 +481,9 @@ export default function AdminSettingsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-600">CPU Usage</span>
-                      <span className="text-sm font-bold text-slate-900">{systemStats.cpuUsage}%</span>
+                      <span className="text-sm font-bold text-slate-900">{systemStats?.cpuUsage}%</span>
                     </div>
-                    <Progress value={systemStats.cpuUsage} className="h-2" />
+                    <Progress value={systemStats?.cpuUsage} className="h-2" />
                     <div className="flex items-center text-xs text-slate-500">
                       <Cpu className="w-3 h-3 mr-1" />
                       Processor
@@ -524,11 +493,11 @@ export default function AdminSettingsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-600">Memory Usage</span>
-                      <span className="text-sm font-bold text-slate-900">{systemStats.memoryUsage}%</span>
+                      <span className="text-sm font-bold text-slate-900">{systemStats?.memoryUsage}%</span>
                     </div>
-                    <Progress value={systemStats.memoryUsage} className="h-2" />
+                    <Progress value={systemStats?.memoryUsage} className="h-2" />
                     <div className="flex items-center text-xs text-slate-500">
-                      <Memory className="w-3 h-3 mr-1" />
+                      <Cpu className="w-3 h-3 mr-1" />
                       RAM
                     </div>
                   </div>
@@ -536,9 +505,9 @@ export default function AdminSettingsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-600">Storage Usage</span>
-                      <span className="text-sm font-bold text-slate-900">{systemStats.storageUsage}%</span>
+                      <span className="text-sm font-bold text-slate-900">{systemStats?.storageUsage}%</span>
                     </div>
-                    <Progress value={systemStats.storageUsage} className="h-2" />
+                    <Progress value={systemStats?.storageUsage} className="h-2" />
                     <div className="flex items-center text-xs text-slate-500">
                       <Storage className="w-3 h-3 mr-1" />
                       Disk Space
@@ -548,9 +517,9 @@ export default function AdminSettingsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-600">Network Usage</span>
-                      <span className="text-sm font-bold text-slate-900">{systemStats.networkUsage}%</span>
+                      <span className="text-sm font-bold text-slate-900">{systemStats?.networkUsage}%</span>
                     </div>
-                    <Progress value={systemStats.networkUsage} className="h-2" />
+                    <Progress value={systemStats?.networkUsage} className="h-2" />
                     <div className="flex items-center text-xs text-slate-500">
                       <Network className="w-3 h-3 mr-1" />
                       Bandwidth
@@ -574,19 +543,19 @@ export default function AdminSettingsPage() {
               <CardContent>
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                   <div className="text-center p-4 bg-orange-50 rounded-xl">
-                    <div className="text-2xl font-bold text-orange-600">{systemStats.activeUsers.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-orange-600">{systemStats?.activeUsers.toLocaleString()}</div>
                     <div className="text-sm text-slate-600">Active Users</div>
                   </div>
                   <div className="text-center p-4 bg-blue-50 rounded-xl">
-                    <div className="text-2xl font-bold text-blue-600">{systemStats.totalJobs.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-blue-600">{systemStats?.totalJobs.toLocaleString()}</div>
                     <div className="text-sm text-slate-600">Total Jobs</div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-xl">
-                    <div className="text-2xl font-bold text-green-600">{systemStats.totalApplications.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-green-600">{systemStats?.totalApplications.toLocaleString()}</div>
                     <div className="text-sm text-slate-600">Applications</div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-xl">
-                    <div className="text-2xl font-bold text-purple-600">{systemStats.systemUptime}</div>
+                    <div className="text-2xl font-bold text-purple-600">{systemStats?.systemUptime}</div>
                     <div className="text-sm text-slate-600">System Uptime</div>
                   </div>
                 </div>
@@ -609,22 +578,44 @@ export default function AdminSettingsPage() {
       case "backup":
         return (
           <div className="space-y-6">
-            <Card className="simple-card">
-              <CardHeader>
-                <CardTitle className="text-slate-900 flex items-center">
-                  <Database className="w-5 h-5 mr-2 text-orange-600" />
-                  Backup Configuration
-                </CardTitle>
-                <CardDescription className="text-slate-600">
-                  Configure automated backup settings and manage data protection
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <Label htmlFor="backupFrequency">Backup Frequency</Label>
-                    <Select value={backupSettings.backupFrequency} onValueChange={(value) => setBackupSettings({...backupSettings, backupFrequency: value})}>
-                      <SelectTrigger className="form-input">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Backup & Recovery</h3>
+                <p className="text-sm text-slate-600">Manage system backups and data recovery</p>
+              </div>
+              <Button onClick={() => handleBackup()} disabled={isLoading} className="btn-primary">
+                <Download className="w-4 h-4 mr-2" />
+                Create Backup
+              </Button>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Database className="w-5 h-5 text-blue-600" />
+                    <span>Backup Settings</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Auto Backup</Label>
+                      <p className="text-xs text-slate-500">Automatically create backups</p>
+                    </div>
+                    <Switch
+                      checked={backupSettings?.autoBackup}
+                      onCheckedChange={(checked) => setBackupSettings(prev => ({ ...prev, autoBackup: checked }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Backup Frequency</Label>
+                    <Select
+                      value={backupSettings?.backupFrequency}
+                      onValueChange={(value) => setBackupSettings(prev => ({ ...prev, backupFrequency: value }))}
+                    >
+                      <SelectTrigger className="form-input bg-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -635,99 +626,379 @@ export default function AdminSettingsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label htmlFor="retentionPeriod">Retention Period (days)</Label>
+
+                  <div className="space-y-2">
+                    <Label>Retention Period (days)</Label>
                     <Input
-                      id="retentionPeriod"
                       type="number"
-                      value={backupSettings.retentionPeriod}
-                      onChange={(e) => setBackupSettings({...backupSettings, retentionPeriod: parseInt(e.target.value)})}
-                      className="form-input"
+                      value={backupSettings?.retentionPeriod}
+                      onChange={(e) => setBackupSettings(prev => ({ ...prev, retentionPeriod: parseInt(e.target.value) }))}
+                      className="form-input bg-white"
+                      placeholder="Enter retention period in days"
                     />
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="autoBackup"
-                      checked={backupSettings.autoBackup}
-                      onCheckedChange={(checked) => setBackupSettings({...backupSettings, autoBackup: checked})}
-                    />
-                    <Label htmlFor="autoBackup">Enable Automatic Backups</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="includeFiles"
-                      checked={backupSettings.includeFiles}
-                      onCheckedChange={(checked) => setBackupSettings({...backupSettings, includeFiles: checked})}
-                    />
-                    <Label htmlFor="includeFiles">Include File Uploads</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="includeDatabase"
-                      checked={backupSettings.includeDatabase}
-                      onCheckedChange={(checked) => setBackupSettings({...backupSettings, includeDatabase: checked})}
-                    />
-                    <Label htmlFor="includeDatabase">Include Database</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="encryptionEnabled"
-                      checked={backupSettings.encryptionEnabled}
-                      onCheckedChange={(checked) => setBackupSettings({...backupSettings, encryptionEnabled: checked})}
-                    />
-                    <Label htmlFor="encryptionEnabled">Enable Backup Encryption</Label>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="bg-slate-50 p-4 rounded-xl">
-                  <h4 className="font-semibold text-slate-900 mb-2">Backup Status</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Last Backup:</span>
-                      <span className="text-slate-900">{backupSettings.lastBackup}</span>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Include Files</Label>
+                      <p className="text-xs text-slate-500">Backup uploaded files</p>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Next Backup:</span>
-                      <span className="text-slate-900">{backupSettings.nextBackup}</span>
+                    <Switch
+                      checked={backupSettings?.includeFiles}
+                      onCheckedChange={(checked) => setBackupSettings(prev => ({ ...prev, includeFiles: checked }))}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Include Database</Label>
+                      <p className="text-xs text-slate-500">Backup database data</p>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Backup Location:</span>
-                      <span className="text-slate-900 capitalize">{backupSettings.backupLocation}</span>
+                    <Switch
+                      checked={backupSettings?.includeDatabase}
+                      onCheckedChange={(checked) => setBackupSettings(prev => ({ ...prev, includeDatabase: checked }))}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Encryption</Label>
+                      <p className="text-xs text-slate-500">Encrypt backup files</p>
+                    </div>
+                    <Switch
+                      checked={backupSettings?.encryptionEnabled}
+                      onCheckedChange={(checked) => setBackupSettings(prev => ({ ...prev, encryptionEnabled: checked }))}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Activity className="w-5 h-5 text-green-600" />
+                    <span>Backup Status</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Last Backup</span>
+                      <span className="font-medium">{backupSettings?.lastBackup}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Next Backup</span>
+                      <span className="font-medium">{backupSettings?.nextBackup}</span>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex space-x-4">
-                  <Button 
-                    onClick={handleBackup} 
-                    disabled={isLoading}
-                    className="bg-orange-600 hover:bg-orange-700 text-white"
-                  >
-                    {isLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Creating Backup...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Create Manual Backup
-                      </>
-                    )}
-                  </Button>
-                  <Button variant="outline" className="btn-secondary">
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Latest Backup
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Backup Location</span>
+                      <span className="font-medium capitalize">{backupSettings?.backupLocation}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Storage Used</span>
+                      <span className="font-medium">2.4 GB</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-4">
+                    <Button variant="outline" className="w-full" disabled={isLoading}>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Restore from Backup
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
+        )
+
+      case "notifications":
+        return (
+          <Card className="simple-card">
+            <CardHeader>
+              <CardTitle className="text-slate-900 flex items-center">
+                <Bell className="w-5 h-5 mr-2 text-orange-600" />
+                Notification Settings
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                Configure how and when notifications are sent to users and admins
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableEmailNotifications"
+                    checked={notificationSettings?.enableEmailNotifications}
+                    onCheckedChange={(checked) => setNotificationSettings({...notificationSettings, enableEmailNotifications: checked})}
+                  />
+                  <Label htmlFor="enableEmailNotifications">Enable Email Notifications</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enablePushNotifications"
+                    checked={notificationSettings?.enablePushNotifications}
+                    onCheckedChange={(checked) => setNotificationSettings({...notificationSettings, enablePushNotifications: checked})}
+                  />
+                  <Label htmlFor="enablePushNotifications">Enable Push Notifications</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableAdminNotifications"
+                    checked={notificationSettings?.enableAdminNotifications}
+                    onCheckedChange={(checked) => setNotificationSettings({...notificationSettings, enableAdminNotifications: checked})}
+                  />
+                  <Label htmlFor="enableAdminNotifications">Notify Admins of Important Events</Label>
+                </div>
+                <div>
+                  <Label htmlFor="digestFrequency">Digest Email Frequency</Label>
+                  <Select value={notificationSettings?.digestFrequency} onValueChange={(value) => setNotificationSettings({...notificationSettings, digestFrequency: value})}>
+                    <SelectTrigger className="form-input bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button onClick={() => handleSave("notifications")} disabled={isLoading} className="bg-orange-600 hover:bg-orange-700 text-white">
+                {isLoading ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>Saving...</>) : (<><Save className="mr-2 h-4 w-4" />Save Notification Settings</>)}
+              </Button>
+            </CardContent>
+          </Card>
+        )
+
+      case "integrations":
+        return (
+          <Card className="simple-card">
+            <CardHeader>
+              <CardTitle className="text-slate-900 flex items-center">
+                <Zap className="w-5 h-5 mr-2 text-orange-600" />
+                Integrations
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                Manage third-party integrations (email, analytics, AI, etc.)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="emailProvider">Email Provider</Label>
+                  <Select value={integrationSettings?.emailProvider} onValueChange={(value) => setIntegrationSettings({...integrationSettings, emailProvider: value})}>
+                    <SelectTrigger className="form-input bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="smtp">SMTP</SelectItem>
+                      <SelectItem value="sendgrid">SendGrid</SelectItem>
+                      <SelectItem value="mailgun">Mailgun</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="analytics">Analytics Integration</Label>
+                  <Select value={integrationSettings?.analytics} onValueChange={(value) => setIntegrationSettings({...integrationSettings, analytics: value})}>
+                    <SelectTrigger className="form-input bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="google">Google Analytics</SelectItem>
+                      <SelectItem value="mixpanel">Mixpanel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="aiProvider">AI Provider</Label>
+                  <Select value={integrationSettings?.aiProvider} onValueChange={(value) => setIntegrationSettings({...integrationSettings, aiProvider: value})}>
+                    <SelectTrigger className="form-input bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="huggingface">Hugging Face</SelectItem>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button onClick={() => handleSave("integrations")} disabled={isLoading} className="bg-orange-600 hover:bg-orange-700 text-white">
+                {isLoading ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>Saving...</>) : (<><Save className="mr-2 h-4 w-4" />Save Integrations</>)}
+              </Button>
+            </CardContent>
+          </Card>
+        )
+
+      case "users":
+        return (
+          <Card className="simple-card">
+            <CardHeader>
+              <CardTitle className="text-slate-900 flex items-center">
+                <Users className="w-5 h-5 mr-2 text-orange-600" />
+                User Management Settings
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                Configure user roles, permissions, and onboarding
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="defaultRole">Default User Role</Label>
+                  <Select value={userSettings?.defaultRole} onValueChange={(value) => setUserSettings({...userSettings, defaultRole: value})}>
+                    <SelectTrigger className="form-input bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="seeker">Seeker</SelectItem>
+                      <SelectItem value="employer">Employer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableUserInvites"
+                    checked={userSettings?.enableUserInvites}
+                    onCheckedChange={(checked) => setUserSettings({...userSettings, enableUserInvites: checked})}
+                  />
+                  <Label htmlFor="enableUserInvites">Enable User Invites</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableProfileCompletion"
+                    checked={userSettings?.enableProfileCompletion}
+                    onCheckedChange={(checked) => setUserSettings({...userSettings, enableProfileCompletion: checked})}
+                  />
+                  <Label htmlFor="enableProfileCompletion">Require Profile Completion</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableUserModeration"
+                    checked={userSettings?.enableUserModeration}
+                    onCheckedChange={(checked) => setUserSettings({...userSettings, enableUserModeration: checked})}
+                  />
+                  <Label htmlFor="enableUserModeration">Enable User Moderation</Label>
+                </div>
+              </div>
+              <Button onClick={() => handleSave("users")} disabled={isLoading} className="bg-orange-600 hover:bg-orange-700 text-white">
+                {isLoading ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>Saving...</>) : (<><Save className="mr-2 h-4 w-4" />Save User Settings</>)}
+              </Button>
+            </CardContent>
+          </Card>
+        )
+
+      case "maintenance":
+        return (
+          <Card className="simple-card">
+            <CardHeader>
+              <CardTitle className="text-slate-900 flex items-center">
+                <Server className="w-5 h-5 mr-2 text-orange-600" />
+                Maintenance
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                Manage site maintenance mode and scheduled downtime
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="maintenanceMode"
+                    checked={generalSettings?.maintenanceMode}
+                    onCheckedChange={(checked) => setGeneralSettings({...generalSettings, maintenanceMode: checked})}
+                  />
+                  <Label htmlFor="maintenanceMode">Enable Maintenance Mode</Label>
+                </div>
+                <div>
+                  <Label htmlFor="scheduledDowntime">Scheduled Downtime</Label>
+                  <Input
+                    id="scheduledDowntime"
+                    type="datetime-local"
+                    value={advancedSettings?.scheduledDowntime || ''}
+                    onChange={(e) => setAdvancedSettings({...advancedSettings, scheduledDowntime: e.target.value})}
+                    className="form-input bg-white"
+                    placeholder="Enter scheduled downtime"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="maintenanceMessage">Maintenance Message</Label>
+                  <Textarea
+                    id="maintenanceMessage"
+                    value={advancedSettings?.maintenanceMessage || ''}
+                    onChange={(e) => setAdvancedSettings({...advancedSettings, maintenanceMessage: e.target.value})}
+                    className="form-input bg-white"
+                    rows={2}
+                    placeholder="Enter maintenance message"
+                  />
+                </div>
+              </div>
+              <Button onClick={() => { handleSave("general"); handleSave("advanced"); }} disabled={isLoading} className="bg-orange-600 hover:bg-orange-700 text-white">
+                {isLoading ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>Saving...</>) : (<><Save className="mr-2 h-4 w-4" />Save Maintenance Settings</>)}
+              </Button>
+            </CardContent>
+          </Card>
+        )
+
+      case "advanced":
+        return (
+          <Card className="simple-card">
+            <CardHeader>
+              <CardTitle className="text-slate-900 flex items-center">
+                <Settings className="w-5 h-5 mr-2 text-orange-600" />
+                Advanced Settings
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                Advanced configuration for power users and developers
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="customCSS">Custom CSS</Label>
+                  <Textarea
+                    id="customCSS"
+                    value={advancedSettings?.customCSS || ''}
+                    onChange={(e) => setAdvancedSettings({...advancedSettings, customCSS: e.target.value})}
+                    className="form-input bg-white"
+                    rows={3}
+                    placeholder="Enter custom CSS"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="customJS">Custom JavaScript</Label>
+                  <Textarea
+                    id="customJS"
+                    value={advancedSettings?.customJS || ''}
+                    onChange={(e) => setAdvancedSettings({...advancedSettings, customJS: e.target.value})}
+                    className="form-input bg-white"
+                    rows={3}
+                    placeholder="Enter custom JavaScript"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="featureFlags">Feature Flags (comma separated)</Label>
+                  <Input
+                    id="featureFlags"
+                    value={advancedSettings?.featureFlags || ''}
+                    onChange={(e) => setAdvancedSettings({...advancedSettings, featureFlags: e.target.value})}
+                    className="form-input bg-white"
+                    placeholder="Enter feature flags"
+                  />
+                </div>
+              </div>
+              <Button onClick={() => handleSave("advanced")} disabled={isLoading} className="bg-orange-600 hover:bg-orange-700 text-white">
+                {isLoading ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>Saving...</>) : (<><Save className="mr-2 h-4 w-4" />Save Advanced Settings</>)}
+              </Button>
+            </CardContent>
+          </Card>
         )
 
       default:

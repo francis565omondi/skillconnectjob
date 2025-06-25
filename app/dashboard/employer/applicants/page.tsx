@@ -69,6 +69,7 @@ import {
 } from "@/components/ui/select"
 import { EmployerGuard } from "@/components/admin-auth-guard"
 import { supabase } from "@/lib/supabaseClient"
+import { Logo } from "@/components/logo"
 
 export default function EmployerApplicantsPage() {
   const [applicants, setApplicants] = useState([])
@@ -102,7 +103,7 @@ export default function EmployerApplicantsPage() {
       // First get the employer's jobs
       const { data: jobs, error: jobsError } = await supabase
         .from('jobs')
-        .select('id')
+        .select('id, title, company')
         .eq('employer_id', currentUser.id)
 
       if (jobsError) {
@@ -122,34 +123,35 @@ export default function EmployerApplicantsPage() {
       // Then get applications for those jobs
       const { data: applications, error: applicationsError } = await supabase
         .from('applications')
-        .select(`
-          *,
-          jobs!inner(title, company),
-          profiles!inner(first_name, last_name, email, phone)
-        `)
+        .select('*')
         .in('job_id', jobIds)
-        .order('applied_at', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (applicationsError) {
         console.error('Error fetching applications:', applicationsError)
         setApplicants([])
       } else {
-        const formattedApplications = applications.map(app => ({
-          id: app.id,
-          name: `${app.profiles.first_name} ${app.profiles.last_name}`,
-          avatar: "/placeholder-user.jpg",
-          jobTitle: app.jobs.title,
-          appliedDate: new Date(app.applied_at).toLocaleDateString(),
-          status: app.status,
-          email: app.profiles.email,
-          phone: app.profiles.phone,
-          coverLetter: app.cover_letter,
-          experienceSummary: app.experience_summary,
-          expectedSalary: app.expected_salary,
-          availableStartDate: app.available_start_date,
-          additionalInfo: app.additional_info,
-          cvUrl: app.cv_url
-        }))
+        const formattedApplications = applications.map(app => {
+          // Find the corresponding job for this application
+          const job = jobs.find(j => j.id === app.job_id)
+          
+          return {
+            id: app.id,
+            name: app.applicant_name || 'Unknown Applicant',
+            avatar: "/placeholder-user.jpg",
+            jobTitle: job?.title || 'Unknown Job',
+            appliedDate: new Date(app.created_at).toLocaleDateString(),
+            status: app.status || 'pending',
+            email: app.applicant_email,
+            phone: app.applicant_phone,
+            coverLetter: app.cover_letter,
+            experienceSummary: app.experience_summary,
+            expectedSalary: app.expected_salary,
+            availableStartDate: app.available_start_date,
+            additionalInfo: app.additional_info,
+            cvUrl: app.cv_url
+          }
+        })
         
         setApplicants(formattedApplications)
       }
@@ -192,13 +194,8 @@ export default function EmployerApplicantsPage() {
           <div className="flex min-h-screen w-full">
             <Sidebar className="border-r border-orange-200 bg-white">
               <SidebarHeader>
-                <div className="flex items-center space-x-3 px-4 py-4">
-                  <div className="w-10 h-10 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-                    <Building className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-xl font-bold text-slate-900">
-                    SkillConnect
-                  </span>
+                <div className="px-4 py-4">
+                  <Logo showTagline={false} />
                 </div>
               </SidebarHeader>
 
@@ -298,21 +295,6 @@ export default function EmployerApplicantsPage() {
             </Sidebar>
 
             <SidebarInset className="bg-transparent">
-              <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl">
-                <SidebarTrigger className="-ml-1 text-slate-700 hover:bg-orange-50 hover:text-orange-600 rounded-xl" />
-                <div className="flex-1">
-                  <h1 className="text-lg font-semibold text-slate-900">
-                    Applicants
-                  </h1>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm">
-                    <FileDown className="h-4 w-4 mr-2" />
-                    Export
-                  </Button>
-                </div>
-              </header>
-
               <main className="flex-1 space-y-8 p-6 scroll-simple">
                 <Card className="simple-card">
                   <CardHeader>

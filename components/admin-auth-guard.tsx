@@ -17,10 +17,13 @@ export function AuthGuard({ children, requiredRole, fallback }: AuthGuardProps) 
   const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    const checkAuth = () => {
+    if (isRedirecting) return
+
+    const checkAuth = async () => {
       try {
         const session = sessionStorage.getItem("skillconnect_session")
         const userData = localStorage.getItem("skillconnect_user")
@@ -41,14 +44,16 @@ export function AuthGuard({ children, requiredRole, fallback }: AuthGuardProps) 
             
             // Check if user has the required role
             if (requiredRole && user.role !== requiredRole) {
+              setIsRedirecting(true)
               // Redirect to appropriate dashboard based on user's actual role
               if (user.role === "employer") {
-                router.push("/dashboard/employer")
+                await router.push("/dashboard/employer")
               } else if (user.role === "seeker") {
-                router.push("/dashboard/seeker")
+                await router.push("/dashboard/seeker")
               } else if (user.role === "admin") {
-                router.push("/dashboard/admin")
+                await router.push("/dashboard/admin")
               }
+              // No need to return or do anything else, effect will re-run and exit
               return
             }
           } else {
@@ -68,7 +73,7 @@ export function AuthGuard({ children, requiredRole, fallback }: AuthGuardProps) 
     }
 
     checkAuth()
-  }, [requiredRole, router])
+  }, [requiredRole, router, isRedirecting])
 
   if (isLoading) {
     return (

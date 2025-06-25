@@ -2,493 +2,302 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* Main color palette */
-    --background: 255 255 255;
-    --foreground: 0 0 0;
-    --card: 255 255 255;
-    --card-foreground: 0 0 0;
-    --popover: 255 255 255;
-    --popover-foreground: 0 0 0;
-    --primary: 234 88 12;
-    --primary-foreground: 255 255 255;
-    --secondary: 249 250 251;
-    --secondary-foreground: 0 0 0;
-    --muted: 249 250 251;
-    --muted-foreground: 107 114 128;
-    --accent: 234 88 12;
-    --accent-foreground: 255 255 255;
-    --destructive: 239 68 68;
-    --destructive-foreground: 255 255 255;
-    --border: 229 231 235;
-    --input: 229 231 235;
-    --ring: 234 88 12;
-    --radius: 0.75rem;
+/* -------------------------------------------------------------------------- */
+/*  CUSTOM CSS VARIABLES                                                      */
+/* -------------------------------------------------------------------------- */
 
-    /* Custom colors */
-    --orange: 234 88 12;
-    --orange-light: 255 237 213;
-    --black: 0 0 0;
-  }
-
-  .dark {
-    --background: 0 0 0;
-    --foreground: 255 255 255;
-    --card: 17 17 17;
-    --card-foreground: 255 255 255;
-    --popover: 17 17 17;
-    --popover-foreground: 255 255 255;
-    --primary: 234 88 12;
-    --primary-foreground: 255 255 255;
-    --secondary: 27 27 27;
-    --secondary-foreground: 255 255 255;
-    --muted: 27 27 27;
-    --muted-foreground: 160 160 160;
-    --accent: 234 88 12;
-    --accent-foreground: 255 255 255;
-    --destructive: 239 68 68;
-    --destructive-foreground: 255 255 255;
-    --border: 27 27 27;
-    --input: 27 27 27;
-    --ring: 234 88 12;
-  }
+:root {
+  --background: 255 255 255;
+  --foreground: 0 0 0;
+  --card: 255 255 255;
+  --card-foreground: 0 0 0;
+  --muted: 249 250 251;
+  --muted-foreground: 107 114 128;
+  --border: 229 231 235;
+  --input: 229 231 235;
+  --ring: 234 88 12;
+  --primary: 234 88 12;
+  --primary-foreground: 255 255 255;
+  --secondary: 249 250 251;
+  --secondary-foreground: 107 114 128;
+  --accent: 249 250 251;
+  --accent-foreground: 107 114 128;
+  --destructive: 239 68 68;
+  --destructive-foreground: 255 255 255;
+  --popover: 255 255 255;
+  --popover-foreground: 0 0 0;
+  --radius: 0.5rem;
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  
-  /* Improved responsive container */
-  .container {
-    @apply w-full mx-auto px-4 sm:px-6 lg:px-8;
-    max-width: 1280px;
-  }
-  
-  /* Better responsive breakpoints */
-  @media (min-width: 640px) {
-    .container {
-      max-width: 640px;
-    }
-  }
-  
-  @media (min-width: 768px) {
-    .container {
-      max-width: 768px;
-    }
-  }
-  
-  @media (min-width: 1024px) {
-    .container {
-      max-width: 1024px;
-    }
-  }
-  
-  @media (min-width: 1280px) {
-    .container {
-      max-width: 1280px;
-    }
-  }
+.dark {
+  --background: 15 23 42;
+  --foreground: 248 250 252;
+  --card: 15 23 42;
+  --card-foreground: 248 250 252;
+  --muted: 30 41 59;
+  --muted-foreground: 148 163 184;
+  --border: 51 65 85;
+  --input: 51 65 85;
+  --ring: 234 88 12;
+  --primary: 234 88 12;
+  --primary-foreground: 255 255 255;
+  --secondary: 30 41 59;
+  --secondary-foreground: 148 163 184;
+  --accent: 30 41 59;
+  --accent-foreground: 148 163 184;
+  --destructive: 239 68 68;
+  --destructive-foreground: 255 255 255;
+  --popover: 15 23 42;
+  --popover-foreground: 248 250 252;
 }
 
-/* Hero section with blending background image */
-.hero-with-image {
-  background: linear-gradient(135deg, rgb(234 88 12) 0%, rgb(194 65 12) 100%);
-  background-image: linear-gradient(135deg, rgba(234, 88, 12, 0.95) 0%, rgba(194, 65, 12, 0.9) 100%),
-    url("/placeholder.svg?height=800&width=1200");
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  position: relative;
-  min-height: 100vh;
+/* -------------------------------------------------------------------------- */
+/*  GLOBAL STYLES                                                             */
+/* -------------------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
 }
 
-.hero-with-image::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(234, 88, 12, 0.9) 0%, rgba(194, 65, 12, 0.85) 100%);
-  z-index: 1;
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
 }
 
-.hero-content {
-  position: relative;
-  z-index: 2;
+body {
+  color: rgb(var(--foreground));
+  background: rgb(var(--background));
 }
 
-/* Responsive hero background for mobile */
-@media (max-width: 768px) {
-  .hero-with-image {
-    background-attachment: scroll;
-    background-size: cover;
-    background-position: center center;
-    min-height: 80vh;
-  }
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-/* Simplified card styles using orange theme */
-.simple-card {
-  @apply bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-orange-200;
-}
-
-.simple-card-orange {
-  @apply bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl shadow-md border border-orange-200 overflow-hidden transition-all duration-200 hover:shadow-lg;
-}
-
-/* Button styles with better responsive design */
-.btn-primary {
-  @apply bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md;
-  @apply text-sm sm:text-base px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3;
-  @apply w-full sm:w-auto;
-}
-
-.btn-secondary {
-  @apply bg-white border border-gray-300 text-gray-900 hover:bg-gray-50 rounded-lg font-medium transition-all duration-200;
-  @apply text-sm sm:text-base px-3 py-2 sm:px-4 sm:py-2.5 md:px-6 md:py-3;
-  @apply w-full sm:w-auto;
-}
-
-/* Responsive section spacing */
-.section-simple {
-  @apply py-8 sm:py-12 md:py-16 lg:py-20 xl:py-24;
-}
-
-/* Simple gradient backgrounds */
-.bg-orange-gradient {
-  background: linear-gradient(135deg, rgb(234 88 12) 0%, rgb(194 65 12) 100%);
-}
+/* -------------------------------------------------------------------------- */
+/*  UTILITY CLASSES                                                           */
+/* -------------------------------------------------------------------------- */
 
 .bg-light-gradient {
-  background: linear-gradient(135deg, rgb(255 255 255) 0%, rgb(249 250 251) 100%);
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
-/* Highly responsive stats section */
-.stats-simple {
-  @apply bg-orange-gradient text-white relative;
+.section-simple {
+  padding: 4rem 0;
 }
 
-.stats-simple::before {
-  content: "";
-  position: absolute;
-  top: -20px;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: #f8fafc;
-  border-radius: 0 0 50% 50% / 0 0 100% 100%;
-}
-
-.stats-simple::after {
-  content: "";
-  position: absolute;
-  bottom: -20px;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: #f8fafc;
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-}
-
-@media (min-width: 768px) {
-  .stats-simple::before,
-  .stats-simple::after {
-    height: 60px;
-    top: -30px;
-    bottom: -30px;
+@media (min-width: 640px) {
+  .section-simple {
+    padding: 5rem 0;
   }
 }
 
-/* Responsive hover effects */
-.hover-lift {
-  @apply transition-all duration-200 hover:scale-105 hover:shadow-lg;
-}
-
-@media (max-width: 768px) {
-  .hover-lift:hover {
-    transform: none;
+@media (min-width: 1024px) {
+  .section-simple {
+    padding: 6rem 0;
   }
-}
-
-/* Highly responsive typography */
-.heading-xl {
-  @apply text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-slate-900 leading-tight;
 }
 
 .heading-lg {
-  @apply text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-slate-900 mb-4;
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+@media (min-width: 640px) {
+  .heading-lg {
+    font-size: 3rem;
+    line-height: 1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .heading-lg {
+    font-size: 3.75rem;
+    line-height: 1;
+  }
 }
 
 .text-simple {
-  @apply text-sm sm:text-base md:text-lg text-slate-600 leading-relaxed;
-}
-
-.hero-heading {
-  @apply text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl 2xl:text-7xl font-bold leading-tight;
-}
-
-.hero-text {
-  @apply text-base sm:text-lg md:text-xl text-white/90 leading-relaxed;
-}
-
-.accent-orange {
-  @apply text-orange-600 font-semibold;
-}
-
-/* Responsive container utilities */
-.container-responsive {
-  @apply w-full mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  color: #64748b;
 }
 
 .grid-responsive-2 {
-  @apply grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 lg:gap-8;
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .grid-responsive-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .grid-responsive-3 {
-  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8;
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1.5rem;
 }
 
-.grid-responsive-4 {
-  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8;
-}
-
-.card-padding {
-  @apply p-4 sm:p-6 lg:p-8;
-}
-
-.form-input {
-  @apply w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors;
-}
-
-/* Responsive navigation */
-.nav-mobile {
-  @apply fixed inset-0 z-50 bg-white/95 backdrop-blur-lg lg:hidden;
-}
-
-.nav-desktop {
-  @apply hidden lg:flex items-center space-x-8;
-}
-
-.search-responsive {
-  @apply w-full sm:w-80 lg:w-96;
-}
-
-/* Job card responsive design */
-.job-card {
-  @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 hover:shadow-md transition-all duration-200;
-}
-
-.job-card-header {
-  @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4;
-}
-
-.job-card-company {
-  @apply flex items-center gap-2 text-sm text-gray-600;
-}
-
-.job-card-badge {
-  @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium;
-}
-
-/* Testimonial responsive design */
-.testimonial-card {
-  @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 lg:p-8;
-}
-
-/* Stats grid responsive */
-.stats-grid {
-  @apply grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 lg:gap-8;
-}
-
-/* Service grid responsive */
-.service-grid {
-  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8;
-}
-
-/* Mobile menu responsive */
-.mobile-menu {
-  @apply fixed inset-0 z-50 bg-white/95 backdrop-blur-lg transform transition-transform duration-300 ease-in-out;
-}
-
-.mobile-menu.closed {
-  @apply translate-x-full;
-}
-
-.mobile-menu.open {
-  @apply translate-x-0;
-}
-
-/* Footer responsive */
-.footer-grid {
-  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8;
-}
-
-/* Custom scrollbar */
-.scroll-simple::-webkit-scrollbar {
-  @apply w-2;
-}
-
-.scroll-simple::-webkit-scrollbar-track {
-  @apply bg-gray-100 rounded-full;
-}
-
-.scroll-simple::-webkit-scrollbar-thumb {
-  @apply bg-orange-300 rounded-full hover:bg-orange-400 transition-colors;
-}
-
-.scroll-simple::-webkit-scrollbar-thumb:hover {
-  @apply bg-orange-500;
-}
-
-/* Mobile-first responsive utilities */
-@media (max-width: 640px) {
-  .btn-primary,
-  .btn-secondary {
-    @apply w-full text-sm px-4 py-2.5;
-  }
-  
-  .form-input {
-    @apply text-sm px-3 py-2;
-  }
-  
-  .card-padding {
-    @apply p-4;
-  }
-  
-  .section-simple {
-    @apply py-8;
+@media (min-width: 640px) {
+  .grid-responsive-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-/* Responsive images */
-.responsive-image {
-  @apply w-full h-auto object-cover;
-}
-
-/* Responsive spacing utilities */
-.space-responsive {
-  @apply space-y-4 sm:space-y-6 lg:space-y-8;
-}
-
-.gap-responsive {
-  @apply gap-4 sm:gap-6 lg:gap-8;
-}
-
-/* Print styles */
-@media print {
-  .hero-with-image {
-    background: none !important;
+@media (min-width: 1024px) {
+  .grid-responsive-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-/* Additional responsive utilities */
-.text-responsive-sm {
-  @apply text-xs sm:text-sm md:text-base;
+/* -------------------------------------------------------------------------- */
+/*  COMPONENT STYLES                                                          */
+/* -------------------------------------------------------------------------- */
+
+.simple-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
 }
 
-.text-responsive-base {
-  @apply text-sm sm:text-base md:text-lg;
+.simple-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-.text-responsive-lg {
-  @apply text-base sm:text-lg md:text-xl;
+.hover-lift:hover {
+  transform: translateY(-2px);
 }
 
-.padding-responsive {
-  @apply p-4 sm:p-6 md:p-8;
+.btn-primary {
+  background: #ea580c;
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
 }
 
-.margin-responsive {
-  @apply m-4 sm:m-6 md:m-8;
+.btn-primary:hover {
+  background: #c2410c;
+  transform: translateY(-1px);
 }
 
-/* Responsive sidebar */
-@media (max-width: 1024px) {
-  .sidebar-responsive {
-    @apply fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out;
-  }
-  
-  .sidebar-responsive.closed {
-    @apply -translate-x-full;
-  }
-  
-  .sidebar-responsive.open {
-    @apply translate-x-0;
-  }
+.btn-secondary {
+  background: white;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
 }
 
-/* Responsive table */
-@media (max-width: 768px) {
-  .table-responsive {
-    @apply block overflow-x-auto;
-  }
-  
-  .table-responsive table {
-    @apply min-w-full;
-  }
+.btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
 }
 
-/* Responsive modal/dialog */
-@media (max-width: 640px) {
-  .modal-responsive {
-    @apply mx-4 my-8 max-w-sm;
-  }
+/* -------------------------------------------------------------------------- */
+/*  FORM STYLES                                                               */
+/* -------------------------------------------------------------------------- */
+
+/* Ensure all form inputs have white backgrounds and black text */
+input, textarea, select {
+  background-color: white !important;
+  color: #000000 !important;
+  border: 1px solid #d1d5db !important;
 }
 
-/* Touch-friendly interactive elements */
-@media (hover: none) and (pointer: coarse) {
-  .touch-friendly {
-    @apply min-h-[44px] min-w-[44px];
-  }
+input::placeholder, textarea::placeholder {
+  color: #6b7280 !important;
 }
 
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-  .simple-card {
-    @apply border-2 border-gray-800;
-  }
-  
-  .btn-primary {
-    @apply border-2 border-orange-800;
-  }
+/* Card backgrounds */
+.card, .simple-card {
+  background-color: white !important;
+  color: #000000 !important;
 }
 
-/* Reduced motion support */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+/* Dialog/Modal backgrounds */
+.dialog, .modal {
+  background-color: white !important;
 }
 
-/* Line clamp utilities for text truncation */
-.line-clamp-1 {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+/* Additional form element styling */
+input[type="text"], 
+input[type="email"], 
+input[type="password"], 
+input[type="number"], 
+input[type="tel"], 
+input[type="url"], 
+input[type="search"],
+textarea,
+select {
+  background-color: white !important;
+  color: #000000 !important;
+  border: 1px solid #d1d5db !important;
 }
+
+/* Override any dark mode classes */
+.dark input,
+.dark textarea,
+.dark select,
+.dark .card,
+.dark .simple-card {
+  background-color: white !important;
+  color: #000000 !important;
+  border: 1px solid #d1d5db !important;
+}
+
+/* Ensure all UI components have white backgrounds */
+[data-radix-popper-content-wrapper] {
+  background-color: white !important;
+}
+
+[role="dialog"] {
+  background-color: white !important;
+}
+
+/* Override any Tailwind dark mode classes */
+.dark\:bg-gray-900 {
+  background-color: white !important;
+}
+
+.dark\:text-white {
+  color: #000000 !important;
+}
+
+.dark\:border-gray-700 {
+  border-color: #d1d5db !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  LINE CLAMP UTILITY                                                        */
+/* -------------------------------------------------------------------------- */
 
 .line-clamp-2 {
-  overflow: hidden;
   display: -webkit-box;
-  -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .line-clamp-3 {
-  overflow: hidden;
   display: -webkit-box;
-  -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

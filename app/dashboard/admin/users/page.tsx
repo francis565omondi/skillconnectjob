@@ -72,12 +72,12 @@ export default function AdminUsersPage() {
       } else {
         const formattedUsers = usersData.map((user: any) => ({
           id: user.id,
-          name: `${user.first_name || 'Unknown'} ${user.last_name || 'User'}`,
-          email: user.email,
-          role: user.role,
+          name: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'N/A',
+          email: user.email || 'N/A',
+          role: user.role || 'N/A',
           status: user.status || 'active',
-          joinDate: new Date(user.created_at).toLocaleDateString(),
-          lastActive: new Date(user.updated_at || user.created_at).toLocaleDateString(),
+          joinDate: user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A',
+          lastActive: user.updated_at ? new Date(user.updated_at).toLocaleDateString() : (user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'),
           phone: user.phone || 'Not provided',
           location: user.location || 'Not specified',
         }))
@@ -407,9 +407,9 @@ export default function AdminUsersPage() {
                               <TableRow key={user.id} className="border-orange-100 hover:bg-orange-100">
                                 <TableCell>
                                   <div>
-                                    <div className="font-medium text-slate-900">{user.name}</div>
-                                    <div className="text-sm text-slate-600">{user.email}</div>
-                                    <div className="text-xs text-slate-500">{user.phone}</div>
+                                    <div className="font-medium text-slate-900">{user.name || user.email || 'N/A'}</div>
+                                    <div className="text-sm text-slate-600">{user.email || 'N/A'}</div>
+                                    <div className="text-xs text-slate-500">{user.phone || 'Not provided'}</div>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -421,7 +421,7 @@ export default function AdminUsersPage() {
                                     ) : (
                                       <Building className="w-3 h-3 mr-1" />
                                     )}
-                                    {user.role}
+                                    {user.role || 'N/A'}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
@@ -434,11 +434,11 @@ export default function AdminUsersPage() {
                                           : "bg-red-500"
                                     } text-white border-0 rounded-xl`}
                                   >
-                                    {user.status}
+                                    {user.status || 'N/A'}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-slate-600">{user.joinDate}</TableCell>
-                                <TableCell className="text-slate-600">{user.lastActive}</TableCell>
+                                <TableCell className="text-slate-600">{user.joinDate || 'N/A'}</TableCell>
+                                <TableCell className="text-slate-600">{user.lastActive || 'N/A'}</TableCell>
                                 <TableCell>
                                   <div className="flex space-x-2">
                                     <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white rounded-xl">

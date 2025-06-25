@@ -66,10 +66,12 @@ export default function AdminReportsPage() {
       setIsLoading(true)
       
       // Fetch basic stats
-      const [usersResult, jobsResult, applicationsResult] = await Promise.all([
+      const [usersResult, jobsResult, applicationsResult, pendingVerificationsResult, flaggedContentResult] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact' }),
         supabase.from('jobs').select('*', { count: 'exact' }),
         supabase.from('applications').select('*', { count: 'exact' }),
+        supabase.from('verifications').select('*', { count: 'exact' }).eq('status', 'pending'),
+        supabase.from('flagged_content').select('*', { count: 'exact' }).in('status', ['pending', 'reviewed']),
       ])
 
       setStats({
@@ -77,8 +79,8 @@ export default function AdminReportsPage() {
         totalJobs: jobsResult.data?.length || 0,
         totalApplications: applicationsResult.data?.length || 0,
         activeJobs: jobsResult.data?.filter((job: any) => job.status === 'active').length || 0,
-        pendingVerifications: 12, // Mock data
-        flaggedContent: 8, // Mock data
+        pendingVerifications: pendingVerificationsResult.data?.length || 0,
+        flaggedContent: flaggedContentResult.data?.length || 0,
       })
     } catch (error) {
       console.error('Error fetching report data:', error)
