@@ -41,6 +41,28 @@ export interface JobSortOptions {
   direction: 'asc' | 'desc'
 }
 
+export interface CreateJobData {
+  title: string
+  company: string
+  location: string
+  type: 'full-time' | 'part-time' | 'contract' | 'internship'
+  salary_min?: number
+  salary_max?: number
+  description: string
+  requirements?: string[]
+  benefits?: string[]
+  status?: 'active' | 'closed' | 'draft'
+  category?: string
+  experience_level?: string
+  remote?: boolean
+  contact_email?: string
+  contact_phone?: string
+  company_website?: string
+  company_description?: string
+  visa_sponsorship?: boolean
+  relocation_assistance?: boolean
+}
+
 // Simple in-memory cache
 const cache = new Map<string, { data: any; timestamp: number }>()
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
@@ -285,5 +307,145 @@ export class JobsService {
   // Clear cache (useful for development or when data changes)
   static clearCache(): void {
     cache.clear()
+  }
+
+  // Create a new job
+  static async createJob(jobData: CreateJobData, employerId: string): Promise<Job> {
+    try {
+      console.log('Creating job with data:', { jobData, employerId })
+      
+      // Check authentication using the same method as employer dashboard
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) {
+        throw new Error('User not authenticated')
+      }
+
+      const user = JSON.parse(userData)
+      if (!user || !user.id) {
+        throw new Error('Invalid user data')
+      }
+
+      // Verify the employerId matches the authenticated user
+      if (user.id !== employerId) {
+        throw new Error('User ID mismatch')
+      }
+
+      // Prepare the job data for insertion
+      const insertData = {
+        ...jobData,
+        employer_id: employerId,
+        status: jobData.status || 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      console.log('Inserting job data:', insertData)
+
+      const { data, error } = await supabase
+        .from('jobs')
+        .insert([insertData])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Supabase error creating job:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
+        throw new Error(`Failed to create job: ${error.message}`)
+      }
+
+      if (!data) {
+        throw new Error('No data returned from job creation')
+      }
+
+      console.log('Job created successfully:', data)
+
+      // Clear cache to ensure fresh data
+      this.clearCache()
+
+      return data
+    } catch (error) {
+      console.error('Error in createJob:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        error: error
+      })
+      throw error
+    }
+  }
+
+  // Update an existing job
+  static async updateJob(jobId: string, jobData: Partial<CreateJobData>): Promise<Job> {
+    try {
+      // Check authentication using the same method as employer dashboard
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) {
+        throw new Error('User not authenticated')
+      }
+
+      const user = JSON.parse(userData)
+      if (!user || !user.id) {
+        throw new Error('Invalid user data')
+      }
+
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({
+          ...jobData,
+          updated_at: new Date().toISOString(),
+          has_been_edited: true
+        })
+        .eq('id', jobId)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating job:', error)
+        throw new Error(`Failed to update job: ${error.message}`)
+      }
+
+      // Clear cache to ensure fresh data
+      this.clearCache()
+
+      return data
+    } catch (error) {
+      console.error('Error in updateJob:', error)
+      throw error
+    }
+  }
+
+  // Delete a job
+  static async deleteJob(jobId: string): Promise<void> {
+    try {
+      // Check authentication using the same method as employer dashboard
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) {
+        throw new Error('User not authenticated')
+      }
+
+      const user = JSON.parse(userData)
+      if (!user || !user.id) {
+        throw new Error('Invalid user data')
+      }
+
+      const { error } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', jobId)
+
+      if (error) {
+        console.error('Error deleting job:', error)
+        throw new Error(`Failed to delete job: ${error.message}`)
+      }
+
+      // Clear cache to ensure fresh data
+      this.clearCache()
+    } catch (error) {
+      console.error('Error in deleteJob:', error)
+      throw error
+    }
   }
 } 

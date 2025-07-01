@@ -11,7 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
-  MoreHorizontal, PlusCircle, Users, Eye, Edit, Trash, MapPin, DollarSign, Calendar,
+  MoreHorizontal, PlusCircle, Users, Eye, Edit, Trash, MapPin, DollarSign, Calendar, XCircle, CheckCircle, User,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
@@ -22,7 +22,7 @@ import {
   SidebarMenuItem, SidebarProvider, SidebarTrigger, SidebarInset,
 } from "@/components/ui/sidebar"
 import {
-  Home, Briefcase, User, Settings, Bell, LogOut, Building,
+  Home, Briefcase, Settings, Bell, LogOut, Building,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -34,7 +34,9 @@ import {
 import { supabase } from "@/lib/supabaseClient"
 import { EmployerGuard } from "@/components/admin-auth-guard"
 import { Logo } from "@/components/logo"
-import { ApplyPostNavbar } from "@/components/apply-post-navbar"
+import { ApplicationNavbar } from "@/components/apply-post-navbar"
+import { JobsService } from "@/lib/jobsService"
+import { useRouter } from "next/navigation"
 
 /* -------------------------------------------------------------------------- */
 /*  1.  SHARED DOMAIN MODELS                                                  */
@@ -64,6 +66,16 @@ export interface Job {
   created_at: string
   updated_at: string
   employer_id: string
+  experience_level?: "entry" | "mid" | "senior" | "lead"
+  has_been_edited?: boolean
+  contact_email?: string
+  contact_phone?: string
+  company_website?: string
+  company_description?: string
+  remote?: boolean
+  category?: string
+  visa_sponsorship?: boolean
+  relocation_assistance?: boolean
 }
 
 interface JobFormState {
@@ -71,12 +83,27 @@ interface JobFormState {
   description: string
   company: string
   location: string
-  salary: string
+  salary_min: string
+  salary_max: string
   job_type: "full-time" | "part-time" | "contract" | "internship"
   experience_level: "entry" | "mid" | "senior" | "lead"
   requirements: string
   benefits: string
-  status: "active" | "inactive" | "draft"
+  status: "active" | "inactive" | "draft" | "closed"
+  contact_email: string
+  contact_phone: string
+  company_website: string
+  company_description: string
+  application_deadline: string
+  remote_work: "remote" | "hybrid" | "on-site"
+  category: string
+  industry: string
+  department: string
+  team_size: string
+  travel_requirements: string
+  visa_sponsorship: boolean
+  relocation_assistance: boolean
+  additional_notes: string
 }
 
 /* -------------------------------------------------------------------------- */
@@ -99,15 +126,33 @@ export default function EmployerJobsPage() {
     description: "",
     company: "",
     location: "",
-    salary: "",
+    salary_min: "",
+    salary_max: "",
     job_type: "full-time",
     experience_level: "mid",
     requirements: "",
     benefits: "",
     status: "active",
+    contact_email: "",
+    contact_phone: "",
+    company_website: "",
+    company_description: "",
+    application_deadline: "",
+    remote_work: "on-site",
+    category: "",
+    industry: "",
+    department: "",
+    team_size: "",
+    travel_requirements: "",
+    visa_sponsorship: false,
+    relocation_assistance: false,
+    additional_notes: "",
   })
 
   const [editingJob, setEditingJob] = useState<Job | null>(null)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+
+  const router = useRouter()
 
   /* ---------- 2.2  LOAD CURRENT USER ------------------------------------- */
 
@@ -166,23 +211,37 @@ export default function EmployerJobsPage() {
   }
 
   const openEditDialog = (job: Job) => {
+    if (job.has_been_edited) {
+      alert("This job has already been edited once. No further edits are allowed.")
+      return
+    }
+
     setForm({
       title: job.title,
       description: job.description,
       company: job.company,
       location: job.location,
-      salary: job.salary_min && job.salary_max
-        ? `${job.salary_min} - ${job.salary_max}`
-        : job.salary_min
-        ? `${job.salary_min}+`
-        : job.salary_max
-        ? `Up to ${job.salary_max}`
-        : "",
+      salary_min: job.salary_min?.toString() || "",
+      salary_max: job.salary_max?.toString() || "",
       job_type: job.type,
       experience_level: job.experience_level || "mid",
       requirements: job.requirements.join("\n"),
       benefits: job.benefits.join("\n"),
       status: job.status,
+      contact_email: job.contact_email || "",
+      contact_phone: job.contact_phone || "",
+      company_website: job.company_website || "",
+      company_description: job.company_description || "",
+      application_deadline: "",
+      remote_work: job.remote ? "remote" : "on-site",
+      category: job.category || "",
+      industry: "",
+      department: "",
+      team_size: "",
+      travel_requirements: "",
+      visa_sponsorship: false,
+      relocation_assistance: false,
+      additional_notes: "",
     })
     setEditingJob(job)
     setShowDialog(true)
@@ -198,130 +257,119 @@ export default function EmployerJobsPage() {
     try {
       setIsSubmitting(true)
 
-      // Parse salary range - improved parsing logic
-      let salaryMin = null
-      let salaryMax = null
-      if (form.salary && form.salary.trim()) {
-        const salaryText = form.salary.trim()
-        
-        // Handle different salary formats
-        if (salaryText.includes('-')) {
-          // Format: "50000 - 70000" or "$50,000 - $70,000"
-          const parts = salaryText.split('-').map(part => part.trim())
-          if (parts.length >= 2) {
-            const minStr = parts[0].replace(/[^0-9]/g, '')
-            const maxStr = parts[1].replace(/[^0-9]/g, '')
-            
-            if (minStr && maxStr) {
-              salaryMin = parseInt(minStr)
-              salaryMax = parseInt(maxStr)
-              
-              // Ensure min <= max for database constraint
-              if (salaryMin > salaryMax) {
-                [salaryMin, salaryMax] = [salaryMax, salaryMin]
-              }
-            }
-          }
-        } else if (salaryText.includes('+')) {
-          // Format: "50000+" or "$50,000+"
-          const minStr = salaryText.replace(/[^0-9]/g, '')
-          if (minStr) {
-            salaryMin = parseInt(minStr)
-          }
-        } else if (salaryText.toLowerCase().includes('up to')) {
-          // Format: "Up to 70000" or "Up to $70,000"
-          const maxStr = salaryText.replace(/[^0-9]/g, '')
-          if (maxStr) {
-            salaryMax = parseInt(maxStr)
-          }
-        } else {
-          // Single number format: "50000" or "$50,000"
-          const numStr = salaryText.replace(/[^0-9]/g, '')
-          if (numStr) {
-            salaryMin = parseInt(numStr)
-          }
-        }
-      }
+      const salary_min = form.salary_min ? parseInt(form.salary_min) : null
+      const salary_max = form.salary_max ? parseInt(form.salary_max) : null
 
-      // Convert form data to match database schema
+      const requirements = form.requirements
+        .split("\n")
+        .map((req) => req.trim())
+        .filter((req) => req.length > 0)
+      const benefits = form.benefits
+        .split("\n")
+        .map((benefit) => benefit.trim())
+        .filter((benefit) => benefit.length > 0)
+
       const jobData = {
-        employer_id: currentUser.id,
-        title: form.title.trim(),
-        company: (currentUser.company_name || form.company).trim(),
-        location: form.location.trim(),
+        title: form.title,
+        description: form.description,
+        company: form.company,
+        location: form.location,
         type: form.job_type,
-        salary_min: salaryMin,
-        salary_max: salaryMax,
-        description: form.description.trim(),
-        requirements: form.requirements ? form.requirements.split('\n').filter(req => req.trim()) : [],
-        benefits: form.benefits ? form.benefits.split('\n').filter(benefit => benefit.trim()) : [],
-        status: form.status,
-        experience_level: form.experience_level,
+        salary_min: salary_min || undefined,
+        salary_max: salary_max || undefined,
+        requirements,
+        benefits,
+        status: (form.status === "inactive" ? "draft" : form.status) as "active" | "draft" | "closed",
+        experience_level: form.experience_level as "entry" | "mid" | "senior" | "lead",
+        contact_email: form.contact_email,
+        contact_phone: form.contact_phone,
+        company_website: form.company_website,
+        company_description: form.company_description,
+        remote: form.remote_work === "remote",
+        // category: form.category, // Temporarily commented out until column is added
+        visa_sponsorship: form.visa_sponsorship,
+        relocation_assistance: form.relocation_assistance,
       }
 
-      console.log("Posting job data:", jobData)
-      console.log("Current user:", currentUser)
-
-      let result
       if (editingJob) {
-        // Update existing job
-        result = await supabase.from("jobs").update(jobData).eq("id", editingJob.id)
+        // Update existing job using JobsService
+        const updatedJob = await JobsService.updateJob(editingJob.id, jobData)
+
+        setJobs(prev =>
+          prev.map(job =>
+            job.id === editingJob.id
+              ? { 
+                  ...job, 
+                  ...updatedJob, 
+                  has_been_edited: true, 
+                  updated_at: new Date().toISOString(),
+                  salary_min: salary_min || undefined,
+                  salary_max: salary_max || undefined,
+                  experience_level: form.experience_level as "entry" | "mid" | "senior" | "lead"
+                } as Job
+              : job
+          )
+        )
       } else {
-        // Insert new job
-        result = await supabase.from("jobs").insert(jobData).select()
+        // Create new job using JobsService
+        await JobsService.createJob(jobData, currentUser.id)
+
+        // Refresh jobs list
+        await fetchJobs(currentUser)
       }
 
-      if (result.error) {
-        console.error("Supabase error details:", {
-          message: result.error.message,
-          details: result.error.details,
-          hint: result.error.hint,
-          code: result.error.code
-        })
-        
-        // Handle specific error cases
-        if (result.error.code === '42501') {
-          // Permission denied - RLS policy issue
-          throw new Error("Permission denied. This might be due to Row Level Security policies. Please contact support.")
-        } else if (result.error.code === '23514') {
-          throw new Error("Salary range constraint violation. Please check your salary input.")
-        } else if (result.error.code === '23503') {
-          throw new Error("Foreign key constraint violation. Please check your user ID.")
-        } else if (result.error.code === '23505') {
-          throw new Error("Duplicate entry. This job already exists.")
-        } else if (result.error.message) {
-          throw new Error(`Database error: ${result.error.message}`)
-        } else {
-          throw new Error("Failed to post/update job. Please check your input and try again.")
-        }
-      }
-
-      console.log("Job posted/updated successfully:", result.data)
-
-      // Refresh jobs list
-      await fetchJobs(currentUser)
-
-      // Reset form
+      setShowDialog(false)
       setForm({
         title: "",
         description: "",
         company: "",
         location: "",
-        salary: "",
+        salary_min: "",
+        salary_max: "",
         job_type: "full-time",
         experience_level: "mid",
         requirements: "",
         benefits: "",
         status: "active",
+        contact_email: "",
+        contact_phone: "",
+        company_website: "",
+        company_description: "",
+        application_deadline: "",
+        remote_work: "on-site",
+        category: "",
+        industry: "",
+        department: "",
+        team_size: "",
+        travel_requirements: "",
+        visa_sponsorship: false,
+        relocation_assistance: false,
+        additional_notes: "",
       })
-
-      setShowDialog(false)
       setEditingJob(null)
-      alert(editingJob ? "Job updated successfully!" : "Job posted successfully!")
-    } catch (err) {
-      console.error("Error posting/updating job:", err)
-      const errorMessage = err instanceof Error ? err.message : "Failed to post/update job. Please try again."
-      alert(errorMessage)
+      setShowSuccessModal(true)
+    } catch (error) {
+      console.error("Error posting job:", {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        error: error
+      })
+      
+      // Provide more specific error messages
+      let errorMessage = "Failed to post job. Please try again."
+      if (error instanceof Error) {
+        if (error.message.includes('User not authenticated')) {
+          errorMessage = "Please log in again to post jobs."
+        } else if (error.message.includes('User must be logged in as employer')) {
+          errorMessage = "You must be logged in as an employer to post jobs."
+        } else if (error.message.includes('Failed to create job')) {
+          errorMessage = error.message
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = "Network error. Please check your connection and try again."
+        }
+      }
+      
+      setError(errorMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -359,13 +407,15 @@ export default function EmployerJobsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-green-100 text-green-800">Active</Badge>
+        return "bg-green-100 text-green-800"
       case "inactive":
-        return <Badge variant="secondary">Inactive</Badge>
+        return "bg-gray-100 text-gray-800"
       case "draft":
-        return <Badge variant="outline">Draft</Badge>
+        return "bg-yellow-100 text-yellow-800"
+      case "closed":
+        return "bg-red-100 text-red-800"
       default:
-        return <Badge variant="outline">{status}</Badge>
+        return "bg-gray-100 text-gray-800"
     }
   }
 
@@ -428,7 +478,7 @@ export default function EmployerJobsPage() {
 
   return (
     <>
-      <ApplyPostNavbar backHref="/dashboard/employer" />
+      <ApplicationNavbar backHref="/dashboard/employer" />
       <main className="min-h-screen bg-light-gradient p-6">
                 {/* Header Section */}
                 <div className="flex items-center justify-between">
@@ -488,7 +538,18 @@ export default function EmployerJobsPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell>{getJobTypeBadge(job.type)}</TableCell>
-                                <TableCell>{getStatusBadge(job.status)}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <Badge className={getStatusBadge(job.status)}>
+                                      {job.status}
+                                    </Badge>
+                                    {job.has_been_edited && (
+                                      <Badge variant="outline" className="text-xs">
+                                        Edited
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-1 text-sm text-slate-600">
                                     <Calendar className="w-3 h-3" />
@@ -504,8 +565,8 @@ export default function EmployerJobsPage() {
                                 <TableCell className="text-right">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" className="h-8 w-8 p-0">
-                                        <MoreHorizontal className="h-4 w-4" />
+                                      <Button variant="ghost" size="sm">
+                                        <MoreHorizontal className="w-4 h-4" />
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
@@ -513,29 +574,29 @@ export default function EmployerJobsPage() {
                                       <DropdownMenuItem asChild>
                                         <Link href={`/jobs/${job.id}`}>
                                           <Eye className="w-4 h-4 mr-2" />
-                                          View Job
+                                          View
                                         </Link>
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem asChild>
-                                        <Link href={`/dashboard/employer/applicants`}>
-                                          <Users className="w-4 h-4 mr-2" />
-                                          View Applications
-                                        </Link>
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => openEditDialog(job)}>
+                                      <DropdownMenuItem
+                                        onClick={() => openEditDialog(job)}
+                                        disabled={job.has_been_edited}
+                                      >
                                         <Edit className="w-4 h-4 mr-2" />
-                                        Edit Job
+                                        {job.has_been_edited ? "Already Edited" : "Edit"}
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => handleCloseJob(job.id)}>
-                                        <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                                        Mark as Filled
+                                      <DropdownMenuItem
+                                        onClick={() => handleCloseJob(job.id)}
+                                        disabled={job.status === "closed"}
+                                      >
+                                        <XCircle className="w-4 h-4 mr-2" />
+                                        Close Job
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         onClick={() => handleDeleteJob(job.id)}
                                         className="text-red-600"
                                       >
                                         <Trash className="w-4 h-4 mr-2" />
-                                        Delete Job
+                                        Delete
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
@@ -608,19 +669,35 @@ export default function EmployerJobsPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="salary" className="text-sm font-medium text-slate-700">
-                    Salary Range
+                  <Label htmlFor="salary_min" className="text-sm font-medium text-slate-700">
+                    Minimum Salary
                   </Label>
                   <Input
-                    id="salary"
-                    name="salary"
-                    value={form.salary}
+                    id="salary_min"
+                    name="salary_min"
+                    value={form.salary_min}
                     onChange={handleFormChange}
-                    placeholder="e.g., $50,000 - $70,000"
+                    placeholder="e.g., $50,000"
                     className="mt-1 bg-white text-black border-gray-300"
                   />
                 </div>
 
+                <div>
+                  <Label htmlFor="salary_max" className="text-sm font-medium text-slate-700">
+                    Maximum Salary
+                  </Label>
+                  <Input
+                    id="salary_max"
+                    name="salary_max"
+                    value={form.salary_max}
+                    onChange={handleFormChange}
+                    placeholder="e.g., $70,000"
+                    className="mt-1 bg-white text-black border-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="job_type" className="text-sm font-medium text-slate-700">
                     Job Type *
@@ -637,9 +714,7 @@ export default function EmployerJobsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="experience_level" className="text-sm font-medium text-slate-700">
                     Experience Level *
@@ -656,7 +731,9 @@ export default function EmployerJobsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="status" className="text-sm font-medium text-slate-700">
                     Status *
@@ -669,6 +746,22 @@ export default function EmployerJobsPage() {
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="draft">Draft</SelectItem>
                       <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="remote_work" className="text-sm font-medium text-slate-700">
+                    Remote Work *
+                  </Label>
+                  <Select value={form.remote_work} onValueChange={(value) => handleSelectChange("remote_work", value)}>
+                    <SelectTrigger className="mt-1 bg-white text-black border-gray-300">
+                      <SelectValue placeholder="Select remote work" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-black">
+                      <SelectItem value="remote">Remote</SelectItem>
+                      <SelectItem value="hybrid">Hybrid</SelectItem>
+                      <SelectItem value="on-site">On-site</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -689,6 +782,206 @@ export default function EmployerJobsPage() {
                   required
                   className="mt-1 bg-white text-black border-gray-300"
                 />
+              </div>
+
+              {/* Contact Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="contact_email" className="text-sm font-medium text-slate-700">
+                    Contact Email *
+                  </Label>
+                  <Input
+                    id="contact_email"
+                    name="contact_email"
+                    type="email"
+                    value={form.contact_email}
+                    onChange={handleFormChange}
+                    placeholder="hr@company.com"
+                    required
+                    className="mt-1 bg-white text-black border-gray-300"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="contact_phone" className="text-sm font-medium text-slate-700">
+                    Contact Phone
+                  </Label>
+                  <Input
+                    id="contact_phone"
+                    name="contact_phone"
+                    value={form.contact_phone}
+                    onChange={handleFormChange}
+                    placeholder="+254 700 000 000"
+                    className="mt-1 bg-white text-black border-gray-300"
+                  />
+                </div>
+              </div>
+
+              {/* Company Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="company_website" className="text-sm font-medium text-slate-700">
+                    Company Website
+                  </Label>
+                  <Input
+                    id="company_website"
+                    name="company_website"
+                    value={form.company_website}
+                    onChange={handleFormChange}
+                    placeholder="https://company.com"
+                    className="mt-1 bg-white text-black border-gray-300"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="application_deadline" className="text-sm font-medium text-slate-700">
+                    Application Deadline
+                  </Label>
+                  <Input
+                    id="application_deadline"
+                    name="application_deadline"
+                    type="date"
+                    value={form.application_deadline}
+                    onChange={handleFormChange}
+                    className="mt-1 bg-white text-black border-gray-300"
+                  />
+                </div>
+              </div>
+
+              {/* Company Description */}
+              <div>
+                <Label htmlFor="company_description" className="text-sm font-medium text-slate-700">
+                  Company Description
+                </Label>
+                <Textarea
+                  id="company_description"
+                  name="company_description"
+                  value={form.company_description}
+                  onChange={handleFormChange}
+                  rows={3}
+                  placeholder="Brief description of your company, culture, and mission..."
+                  className="mt-1 bg-white text-black border-gray-300"
+                />
+              </div>
+
+              {/* Job Category and Industry */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="category" className="text-sm font-medium text-slate-700">
+                    Job Category
+                  </Label>
+                  <Select value={form.category} onValueChange={(value) => handleSelectChange("category", value)}>
+                    <SelectTrigger className="mt-1 bg-white text-black border-gray-300">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-black">
+                      <SelectItem value="technology">Technology</SelectItem>
+                      <SelectItem value="healthcare">Healthcare</SelectItem>
+                      <SelectItem value="finance">Finance</SelectItem>
+                      <SelectItem value="education">Education</SelectItem>
+                      <SelectItem value="marketing">Marketing</SelectItem>
+                      <SelectItem value="sales">Sales</SelectItem>
+                      <SelectItem value="operations">Operations</SelectItem>
+                      <SelectItem value="human-resources">Human Resources</SelectItem>
+                      <SelectItem value="legal">Legal</SelectItem>
+                      <SelectItem value="consulting">Consulting</SelectItem>
+                      <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                      <SelectItem value="retail">Retail</SelectItem>
+                      <SelectItem value="hospitality">Hospitality</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="industry" className="text-sm font-medium text-slate-700">
+                    Industry
+                  </Label>
+                  <Input
+                    id="industry"
+                    name="industry"
+                    value={form.industry}
+                    onChange={handleFormChange}
+                    placeholder="e.g., Software Development"
+                    className="mt-1 bg-white text-black border-gray-300"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="department" className="text-sm font-medium text-slate-700">
+                    Department
+                  </Label>
+                  <Input
+                    id="department"
+                    name="department"
+                    value={form.department}
+                    onChange={handleFormChange}
+                    placeholder="e.g., Engineering"
+                    className="mt-1 bg-white text-black border-gray-300"
+                  />
+                </div>
+              </div>
+
+              {/* Team and Travel Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="team_size" className="text-sm font-medium text-slate-700">
+                    Team Size
+                  </Label>
+                  <Select value={form.team_size} onValueChange={(value) => handleSelectChange("team_size", value)}>
+                    <SelectTrigger className="mt-1 bg-white text-black border-gray-300">
+                      <SelectValue placeholder="Select team size" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-black">
+                      <SelectItem value="1-5">1-5 people</SelectItem>
+                      <SelectItem value="6-10">6-10 people</SelectItem>
+                      <SelectItem value="11-25">11-25 people</SelectItem>
+                      <SelectItem value="26-50">26-50 people</SelectItem>
+                      <SelectItem value="51-100">51-100 people</SelectItem>
+                      <SelectItem value="100+">100+ people</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="travel_requirements" className="text-sm font-medium text-slate-700">
+                    Travel Requirements
+                  </Label>
+                  <Select value={form.travel_requirements} onValueChange={(value) => handleSelectChange("travel_requirements", value)}>
+                    <SelectTrigger className="mt-1 bg-white text-black border-gray-300">
+                      <SelectValue placeholder="Select travel requirements" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-black">
+                      <SelectItem value="none">No travel required</SelectItem>
+                      <SelectItem value="occasional">Occasional travel</SelectItem>
+                      <SelectItem value="frequent">Frequent travel</SelectItem>
+                      <SelectItem value="extensive">Extensive travel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Additional Options */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="visa_sponsorship"
+                    checked={form.visa_sponsorship}
+                    onChange={(e) => setForm({ ...form, visa_sponsorship: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  <Label htmlFor="visa_sponsorship" className="text-sm font-medium text-slate-700">
+                    Visa Sponsorship Available
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="relocation_assistance"
+                    checked={form.relocation_assistance}
+                    onChange={(e) => setForm({ ...form, relocation_assistance: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  <Label htmlFor="relocation_assistance" className="text-sm font-medium text-slate-700">
+                    Relocation Assistance Available
+                  </Label>
+                </div>
               </div>
 
               {/* Requirements */}
@@ -723,6 +1016,22 @@ export default function EmployerJobsPage() {
                 />
               </div>
 
+              {/* Additional Notes */}
+              <div>
+                <Label htmlFor="additional_notes" className="text-sm font-medium text-slate-700">
+                  Additional Notes
+                </Label>
+                <Textarea
+                  id="additional_notes"
+                  name="additional_notes"
+                  value={form.additional_notes}
+                  onChange={handleFormChange}
+                  rows={3}
+                  placeholder="Any additional information about the role, application process, or company..."
+                  className="mt-1 bg-white text-black border-gray-300"
+                />
+              </div>
+
               <DialogFooter>
                 <DialogClose asChild>
                   <Button type="button" variant="outline" className="btn-secondary">
@@ -736,6 +1045,62 @@ export default function EmployerJobsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  Job Posted Successfully!
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Your job has been published and is now visible to job seekers. 
+                  You can manage applications and track performance in your dashboard.
+                </p>
+                
+                <div className="space-y-3">
+                  <Button 
+                    onClick={() => router.push('/dashboard/employer/applicants')}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    View Applications
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => router.push('/dashboard/employer/profile')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <User className="w-4 h-4 mr-2" />
+                    Update Company Profile
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => router.push('/jobs')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Public Jobs
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => setShowSuccessModal(false)}
+                    variant="ghost"
+                    className="w-full"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </>
   )

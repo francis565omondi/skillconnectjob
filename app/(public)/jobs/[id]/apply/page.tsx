@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Footer } from "@/components/footer"
 import { useStatusManager, StatusManager } from "@/components/ui/status-notification"
 import { 
@@ -29,11 +30,32 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  Info,
+  AlertTriangle,
 } from "lucide-react"
 import Link from "next/link"
 import { JobsService, type Job } from "@/lib/jobsService"
 import { ApplicationsService, type CreateApplicationData } from "@/lib/applicationsService"
-import { ApplyPostNavbar } from "@/components/apply-post-navbar"
+import { ApplicationNavbar } from "@/components/apply-post-navbar"
+import { supabase } from "@/lib/supabaseClient"
+
+interface UserProfile {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  bio: string
+  skills: string[]
+  experience: string
+  education: string
+  location: string
+  profile_image_url?: string
+  resume_url?: string
+  linkedin_url?: string
+  github_url?: string
+  portfolio_url?: string
+}
 
 export default function JobApplicationPage() {
   const params = useParams()
@@ -45,7 +67,9 @@ export default function JobApplicationPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [hasApplied, setHasApplied] = useState(false)
+  const [missingFields, setMissingFields] = useState<string[]>([])
   
   // Form fields
   const [formData, setFormData] = useState({
@@ -65,6 +89,7 @@ export default function JobApplicationPage() {
   const [cvUploading, setCvUploading] = useState(false)
   const [cvUrl, setCvUrl] = useState('')
   const [cvFilename, setCvFilename] = useState('')
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
   
   const { notifications, removeNotification, showSuccess, showError, showLoading } = useStatusManager()
 
@@ -107,17 +132,8 @@ export default function JobApplicationPage() {
         return
       }
 
-      // Pre-fill form with user data
-      const userData = localStorage.getItem("skillconnect_user")
-      if (userData) {
-        const user = JSON.parse(userData)
-        setFormData(prev => ({
-          ...prev,
-          applicant_name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-          applicant_email: user.email || '',
-          applicant_phone: user.phone || '',
-        }))
-      }
+      // Fetch user profile and auto-fill form
+      await loadUserProfileAndAutoFill()
 
     } catch (error) {
       console.error('Error checking auth and fetching data:', error)
@@ -127,11 +143,141 @@ export default function JobApplicationPage() {
     }
   }
 
+  const loadUserProfileAndAutoFill = async () => {
+    try {
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) return
+
+      const user = JSON.parse(userData)
+      
+      // Fetch complete profile from database
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Error fetching profile:', error)
+        // Use localStorage data as fallback
+        setUserProfile(user)
+      } else {
+        setUserProfile(profile)
+      }
+
+      // Auto-fill form with comprehensive user data
+      const fullName = `${profile?.first_name || user.first_name || ''} ${profile?.last_name || user.last_name || ''}`.trim()
+      const email = profile?.email || user.email || ''
+      const phone = profile?.phone || user.phone || ''
+      const location = profile?.location || user.location || ''
+      const bio = profile?.bio || user.bio || ''
+      const experience = profile?.experience || user.experience || ''
+      const education = profile?.education || user.education || ''
+      const skills = profile?.skills || user.skills || []
+      const portfolio = profile?.portfolio_url || user.portfolio_url || ''
+      const linkedin = profile?.linkedin_url || user.linkedin_url || ''
+      const github = profile?.github_url || user.github_url || ''
+      const resumeUrl = profile?.resume_url || user.resume_url || ''
+
+      // Create comprehensive experience summary from available data
+      let experienceSummary = experience
+      if (bio && !experienceSummary.includes(bio)) {
+        experienceSummary = bio + '\n\n' + experienceSummary
+      }
+      if (education && !experienceSummary.includes(education)) {
+        experienceSummary = experienceSummary + '\n\nEducation:\n' + education
+      }
+      if (skills.length > 0) {
+        const skillsText = 'Skills: ' + skills.join(', ')
+        if (!experienceSummary.includes(skillsText)) {
+          experienceSummary = experienceSummary + '\n\n' + skillsText
+        }
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        applicant_name: fullName,
+        applicant_email: email,
+        applicant_phone: phone,
+        experience_summary: experienceSummary.trim(),
+        portfolio_url: portfolio,
+        linkedin_url: linkedin,
+        additional_info: location ? `Location: ${location}` : '',
+      }))
+
+      // Auto-fill CV if available
+      if (resumeUrl) {
+        setCvUrl(resumeUrl)
+        setCvFilename(resumeUrl.split('/').pop() || 'CV/Resume')
+      }
+
+      // Check for missing important fields and provide helpful feedback
+      const missing: string[] = []
+      const suggestions: string[] = []
+
+      if (!fullName) {
+        missing.push('Full Name')
+        suggestions.push('Please enter your full name as it appears on official documents')
+      }
+      if (!email) {
+        missing.push('Email Address')
+        suggestions.push('Please provide a valid email address for communication')
+      }
+      if (!phone) {
+        missing.push('Phone Number')
+        suggestions.push('Please provide your phone number for urgent communications')
+      }
+      if (!experienceSummary.trim()) {
+        missing.push('Experience Summary')
+        suggestions.push('Please summarize your relevant experience and skills for this position')
+      }
+      if (!resumeUrl) {
+        missing.push('CV/Resume')
+        suggestions.push('Please upload your CV/Resume to complete your application')
+      }
+
+      setMissingFields(missing)
+
+      // Show success message for auto-filled fields
+      const autoFilledFields = []
+      if (fullName) autoFilledFields.push('Full Name')
+      if (email) autoFilledFields.push('Email Address')
+      if (phone) autoFilledFields.push('Phone Number')
+      if (experienceSummary.trim()) autoFilledFields.push('Experience Summary')
+      if (portfolio) autoFilledFields.push('Portfolio URL')
+      if (linkedin) autoFilledFields.push('LinkedIn Profile')
+
+      if (autoFilledFields.length > 0) {
+        showSuccess(
+          'Profile data loaded', 
+          `Auto-filled: ${autoFilledFields.join(', ')}. Please review and complete any missing information.`
+        )
+      }
+
+      // Show warning for missing important fields
+      if (missing.length > 0) {
+        showError(
+          'Missing Information', 
+          `Please complete: ${missing.join(', ')}. ${suggestions.join(' ')}`
+        )
+      }
+
+    } catch (error) {
+      console.error('Error loading user profile:', error)
+      showError('Profile loading failed', 'Please fill in your details manually')
+    }
+  }
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }))
+
+    // Remove field from missing fields if it's now filled
+    if (value.trim() && missingFields.includes(field.replace('applicant_', '').replace('_', ' '))) {
+      setMissingFields(prev => prev.filter(field => field !== field.replace('applicant_', '').replace('_', ' ')))
+    }
   }
 
   const handleFileUpload = async (file: File) => {
@@ -172,6 +318,9 @@ export default function JobApplicationPage() {
       setCvUrl(result.url)
       setCvFilename(result.filename)
       showSuccess('CV uploaded successfully')
+
+      // Remove CV from missing fields
+      setMissingFields(prev => prev.filter(field => field !== 'CV/Resume'))
     } catch (error) {
       console.error('Error uploading CV:', error)
       
@@ -212,6 +361,15 @@ export default function JobApplicationPage() {
     
     if (!currentUser || !job) return
 
+    // Check for required fields
+    const requiredFields = ['applicant_name', 'applicant_email', 'cover_letter', 'experience_summary']
+    const missingRequired = requiredFields.filter(field => !formData[field as keyof typeof formData]?.trim())
+    
+    if (missingRequired.length > 0) {
+      showError('Missing required fields', 'Please fill in all required fields marked with *')
+      return
+    }
+
     try {
       setIsSubmitting(true)
       showLoading('Submitting your application...')
@@ -234,12 +392,10 @@ export default function JobApplicationPage() {
 
       await ApplicationsService.createApplication(applicationData)
       
-      showSuccess('Application submitted successfully!')
+      showSuccess('Application submitted successfully!', 'Your application has been sent to the employer. You can track its status in your dashboard.')
       
-      // Redirect to applications dashboard after a short delay
-      setTimeout(() => {
-        router.push('/dashboard/seeker/applications')
-      }, 2000)
+      // Show success modal with navigation options
+      setShowSuccessModal(true)
 
     } catch (error) {
       console.error('Error submitting application:', error)
@@ -275,49 +431,59 @@ export default function JobApplicationPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white">
-        <StatusManager notifications={notifications} onRemove={removeNotification} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-            <div className="space-y-4">
-              <div className="h-4 bg-gray-200 rounded w-full"></div>
-              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+      <>
+        <ApplicationNavbar backHref="/jobs" />
+        <div className="min-h-screen bg-white pt-20">
+          <StatusManager notifications={notifications} onRemove={removeNotification} />
+          <div className="container mx-auto px-4 py-8">
+            <div className="animate-pulse space-y-6">
+              <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+              <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+              <div className="space-y-4">
+                <div className="h-4 bg-gray-200 rounded w-full"></div>
+                <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </div>
             </div>
           </div>
+          <Footer />
         </div>
-        <Footer />
-      </div>
+      </>
     )
   }
 
   if (!job) {
     return (
-      <div className="min-h-screen bg-white">
-        <StatusManager notifications={notifications} onRemove={removeNotification} />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <Briefcase className="w-20 h-20 text-gray-300 mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">Job Not Found</h1>
-          <p className="text-gray-600 mb-8">The job you're looking for doesn't exist or has been removed.</p>
-          <Button asChild>
-            <Link href="/jobs">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Jobs
-            </Link>
-          </Button>
+      <>
+        <ApplicationNavbar backHref="/jobs" />
+        <div className="min-h-screen bg-white pt-20">
+          <StatusManager notifications={notifications} onRemove={removeNotification} />
+          <div className="container mx-auto px-4 py-8 text-center">
+            <Briefcase className="w-20 h-20 text-gray-300 mx-auto mb-6" />
+            <h1 className="text-2xl font-bold text-gray-900 mb-3">Job Not Found</h1>
+            <p className="text-gray-600 mb-8">The job you're looking for doesn't exist or has been removed.</p>
+            <Button asChild>
+              <Link href="/jobs">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Jobs
+              </Link>
+            </Button>
+          </div>
+          <Footer />
         </div>
-        <Footer />
-      </div>
+      </>
     )
   }
 
   return (
     <>
-      <ApplyPostNavbar backHref={`/jobs`} />
-      <div className="min-h-screen bg-gray-50">
+      <ApplicationNavbar 
+        backHref={`/jobs/${jobId}`} 
+        jobTitle={job?.title}
+        companyName={job?.company}
+      />
+      <div className="min-h-screen bg-gray-50 pt-20">
         <StatusManager notifications={notifications} onRemove={removeNotification} />
         
         {/* Header */}
@@ -354,6 +520,16 @@ export default function JobApplicationPage() {
                 </div>
               </div>
               
+              {/* Missing Fields Alert */}
+              {missingFields.length > 0 && (
+                <Alert className="bg-orange-50 border-orange-200 mb-6">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-800">
+                    <strong>Please complete your profile:</strong> The following information is missing and will help improve your application: {missingFields.join(', ')}
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
                 <div className="flex items-start">
                   <CheckCircle className="w-5 h-5 text-orange-600 mr-3 mt-0.5" />
@@ -378,13 +554,22 @@ export default function JobApplicationPage() {
                 {/* Personal Information */}
                 <Card className="simple-card">
                   <CardHeader>
-                    <CardTitle className="text-xl font-bold text-gray-900">Personal Information</CardTitle>
+                    <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+                      <User className="w-5 h-5 mr-2 text-orange-600" />
+                      Personal Information
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="applicant_name" className="text-sm font-semibold text-gray-700">
+                        <Label htmlFor="applicant_name" className="text-sm font-semibold text-gray-700 flex items-center">
                           Full Name *
+                          {formData.applicant_name && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Auto-filled
+                            </Badge>
+                          )}
                         </Label>
                         <Input
                           id="applicant_name"
@@ -392,11 +577,18 @@ export default function JobApplicationPage() {
                           onChange={(e) => handleInputChange('applicant_name', e.target.value)}
                           required
                           className="mt-2"
+                          placeholder="Enter your full name"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="applicant_email" className="text-sm font-semibold text-gray-700">
+                        <Label htmlFor="applicant_email" className="text-sm font-semibold text-gray-700 flex items-center">
                           Email Address *
+                          {formData.applicant_email && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Auto-filled
+                            </Badge>
+                          )}
                         </Label>
                         <Input
                           id="applicant_email"
@@ -405,13 +597,20 @@ export default function JobApplicationPage() {
                           onChange={(e) => handleInputChange('applicant_email', e.target.value)}
                           required
                           className="mt-2"
+                          placeholder="Enter your email address"
                         />
                       </div>
                     </div>
                     
                     <div>
-                      <Label htmlFor="applicant_phone" className="text-sm font-semibold text-gray-700">
+                      <Label htmlFor="applicant_phone" className="text-sm font-semibold text-gray-700 flex items-center">
                         Phone Number
+                        {formData.applicant_phone && (
+                          <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Auto-filled
+                          </Badge>
+                        )}
                       </Label>
                       <Input
                         id="applicant_phone"
@@ -419,6 +618,7 @@ export default function JobApplicationPage() {
                         value={formData.applicant_phone}
                         onChange={(e) => handleInputChange('applicant_phone', e.target.value)}
                         className="mt-2"
+                        placeholder="Enter your phone number"
                       />
                     </div>
                   </CardContent>
@@ -427,7 +627,10 @@ export default function JobApplicationPage() {
                 {/* Application Details */}
                 <Card className="simple-card">
                   <CardHeader>
-                    <CardTitle className="text-xl font-bold text-gray-900">Application Details</CardTitle>
+                    <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+                      <FileText className="w-5 h-5 mr-2 text-orange-600" />
+                      Application Details
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div>
@@ -445,8 +648,14 @@ export default function JobApplicationPage() {
                     </div>
                     
                     <div>
-                      <Label htmlFor="experience_summary" className="text-sm font-semibold text-gray-700">
+                      <Label htmlFor="experience_summary" className="text-sm font-semibold text-gray-700 flex items-center">
                         Experience Summary *
+                        {formData.experience_summary && (
+                          <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Auto-filled
+                          </Badge>
+                        )}
                       </Label>
                       <Textarea
                         id="experience_summary"
@@ -491,7 +700,16 @@ export default function JobApplicationPage() {
                 {/* CV Upload */}
                 <Card className="simple-card">
                   <CardHeader>
-                    <CardTitle className="text-xl font-bold text-gray-900">CV/Resume</CardTitle>
+                    <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+                      <Upload className="w-5 h-5 mr-2 text-orange-600" />
+                      CV/Resume
+                      {cvUrl && (
+                        <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Auto-loaded
+                        </Badge>
+                      )}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
@@ -499,8 +717,16 @@ export default function JobApplicationPage() {
                         <div className="space-y-4">
                           <CheckCircle className="w-12 h-12 text-green-600 mx-auto" />
                           <div>
-                            <h3 className="font-semibold text-gray-900 mb-2">CV Uploaded Successfully</h3>
-                            <p className="text-gray-600 text-sm">{cvFilename}</p>
+                            <h3 className="font-semibold text-gray-900 mb-2">CV Already Uploaded</h3>
+                            <p className="text-gray-600 text-sm break-all">{cvFilename}</p>
+                            <a
+                              href={cvUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-orange-700 underline text-sm"
+                            >
+                              View/Download CV
+                            </a>
                           </div>
                           <Button
                             variant="outline"
@@ -529,6 +755,7 @@ export default function JobApplicationPage() {
                               onChange={handleFileChange}
                               className="hidden"
                               id="cv-upload"
+                              required={!cvUrl}
                             />
                             <Label
                               htmlFor="cv-upload"
@@ -556,7 +783,10 @@ export default function JobApplicationPage() {
                 {/* Additional Information */}
                 <Card className="simple-card">
                   <CardHeader>
-                    <CardTitle className="text-xl font-bold text-gray-900">Additional Information</CardTitle>
+                    <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+                      <Globe className="w-5 h-5 mr-2 text-orange-600" />
+                      Additional Information
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div>
@@ -574,8 +804,14 @@ export default function JobApplicationPage() {
                     
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="portfolio_url" className="text-sm font-semibold text-gray-700">
+                        <Label htmlFor="portfolio_url" className="text-sm font-semibold text-gray-700 flex items-center">
                           Portfolio URL
+                          {formData.portfolio_url && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Auto-filled
+                            </Badge>
+                          )}
                         </Label>
                         <Input
                           id="portfolio_url"
@@ -587,8 +823,14 @@ export default function JobApplicationPage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="linkedin_url" className="text-sm font-semibold text-gray-700">
+                        <Label htmlFor="linkedin_url" className="text-sm font-semibold text-gray-700 flex items-center">
                           LinkedIn Profile
+                          {formData.linkedin_url && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Auto-filled
+                            </Badge>
+                          )}
                         </Label>
                         <Input
                           id="linkedin_url"
@@ -639,6 +881,62 @@ export default function JobApplicationPage() {
         </section>
 
         <Footer />
+        
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  Application Submitted!
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Your application has been successfully sent to {job?.company}. 
+                  You can track its status in your dashboard.
+                </p>
+                
+                <div className="space-y-3">
+                  <Button 
+                    onClick={() => router.push('/dashboard/seeker/applications')}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    View My Applications
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => router.push('/dashboard/seeker/profile')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <User className="w-4 h-4 mr-2" />
+                    Update My Profile
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => router.push('/jobs')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <Briefcase className="w-4 h-4 mr-2" />
+                    Browse More Jobs
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => setShowSuccessModal(false)}
+                    variant="ghost"
+                    className="w-full"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )

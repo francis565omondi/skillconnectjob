@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { GoogleMap } from "@/components/ui/map"
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton,
@@ -384,6 +385,49 @@ export default function EmployerDashboard() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Job Locations Map */}
+                <Card className="simple-card">
+                  <CardHeader>
+                    <CardTitle className="text-slate-900 flex items-center">
+                      <MapPin className="w-5 h-5 mr-2 text-orange-600" />
+                      Your Job Locations
+                    </CardTitle>
+                    <CardDescription>
+                      Map view of your active job postings across Kenya
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-80 rounded-lg overflow-hidden">
+                      <GoogleMap
+                        center="Nairobi, Kenya"
+                        zoom={8}
+                        markers={[
+                          {
+                            position: "Nairobi, Kenya",
+                            title: "Software Developer",
+                            info: `${currentUser?.company_name}<br/>Nairobi, Kenya<br/>Full-time`
+                          },
+                          {
+                            position: "Mombasa, Kenya",
+                            title: "Marketing Specialist",
+                            info: `${currentUser?.company_name}<br/>Mombasa, Kenya<br/>Part-time`
+                          },
+                          {
+                            position: "Kisumu, Kenya",
+                            title: "Sales Representative",
+                            info: `${currentUser?.company_name}<br/>Kisumu, Kenya<br/>Contract`
+                          }
+                        ]}
+                        className="w-full h-full"
+                      />
+                    </div>
+                    <div className="mt-4 flex items-center justify-center text-sm text-slate-600">
+                      <MapPin className="w-4 h-4 mr-2 text-orange-600" />
+                      {stats.activeJobs} active job postings across Kenya
+                    </div>
+                  </CardContent>
+                </Card>
               </main>
             </SidebarInset>
           </div>

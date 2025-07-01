@@ -1,7 +1,13 @@
 import { HfInference } from '@huggingface/inference'
 
-// Initialize Hugging Face client (free tier)
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY || '')
+// Initialize Hugging Face client only if API key is available
+const hf = process.env.HUGGINGFACE_API_KEY 
+  ? new HfInference(process.env.HUGGINGFACE_API_KEY)
+  : null
+
+if (!process.env.HUGGINGFACE_API_KEY) {
+  console.warn('HUGGINGFACE_API_KEY not found. AI features will use fallback methods.')
+}
 
 const SERVICE_EMAIL = 'skillconnect2025@gmail.com'
 
@@ -90,8 +96,14 @@ export class AIServices {
    */
   static async moderateContent(content: string, contentType: 'job' | 'resume' | 'application'): Promise<ContentAnalysis> {
     try {
-      // Use Hugging Face text classification for content moderation
-      const moderation = await hf.textClassification({
+      // Check if Hugging Face is available
+      if (!hf) {
+        console.warn('Hugging Face not available, using fallback moderation')
+        return this.fallbackContentModeration(content, contentType)
+      }
+
+      // Use Hugging Face zero-shot classification for content moderation
+      const moderation = await hf!.zeroShotClassification({
         model: 'facebook/bart-large-mnli',
         inputs: content,
         parameters: {
@@ -126,13 +138,24 @@ export class AIServices {
       }
     } catch (error) {
       console.error('Content moderation error:', error)
-      return {
-        isAppropriate: true, // Default to safe
-        confidence: 0,
-        flags: ['Unable to analyze content'],
-        riskLevel: 'low',
-        suggestions: ['Please review manually']
-      }
+      // Fallback to basic content checking
+      return this.fallbackContentModeration(content, contentType)
+    }
+  }
+
+  /**
+   * Fallback content moderation when AI service is not available
+   */
+  private static fallbackContentModeration(content: string, contentType: string): ContentAnalysis {
+    const flags = this.checkContentFlags(content, contentType)
+    const isAppropriate = flags.length === 0
+    
+    return {
+      isAppropriate,
+      confidence: isAppropriate ? 80 : 30,
+      flags,
+      riskLevel: flags.length > 2 ? 'high' : flags.length > 1 ? 'medium' : 'low',
+      suggestions: this.generateContentSuggestions(content, contentType, flags)
     }
   }
 

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Footer } from "@/components/footer"
+import { GoogleMap } from "@/components/ui/map"
 import { 
   Search, 
   MapPin, 
@@ -346,6 +347,33 @@ export default function JobsPage() {
                       <option value="internship">Internship</option>
                     </select>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Job Locations Map */}
+              <Card className="simple-card rounded-2xl border-0 shadow-lg mt-6">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-gray-900 flex items-center">
+                    <MapPin className="w-5 h-5 mr-2 text-orange-600" />
+                    Job Locations
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64 rounded-lg overflow-hidden">
+                    <GoogleMap
+                      center="Nairobi, Kenya"
+                      zoom={8}
+                      markers={jobs.slice(0, 10).map(job => ({
+                        position: job.location,
+                        title: job.title,
+                        info: `${job.company}<br/>${job.location}<br/>${job.type}`
+                      }))}
+                      className="w-full h-full"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600 mt-3 text-center">
+                    Click on markers to see job details
+                  </p>
                 </CardContent>
               </Card>
             </div>

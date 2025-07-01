@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Footer } from "@/components/footer";
+import { GoogleMap } from "@/components/ui/map";
 import {
   Target,
   Heart,
@@ -296,6 +297,55 @@ export default function AboutOverviewPage() {
                 </Card>
               ))}
             </div>
+          </div>
+
+          {/* Company Presence Map */}
+          <div className="mb-16">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Our Presence Across Kenya</h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Serving job seekers and employers across major cities in Kenya
+              </p>
+            </div>
+            <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
+              <CardContent className="p-8">
+                <div className="h-96 rounded-lg overflow-hidden">
+                  <GoogleMap
+                    center="Nairobi, Kenya"
+                    zoom={7}
+                    markers={[
+                      {
+                        position: "Nairobi, Kenya",
+                        title: "SkillConnect - Main Office",
+                        info: "Nairobi, Kenya<br/>Headquarters & Main Operations"
+                      },
+                      {
+                        position: "Mombasa, Kenya",
+                        title: "SkillConnect - Coastal Region",
+                        info: "Mombasa, Kenya<br/>Coastal Operations & Support"
+                      },
+                      {
+                        position: "Kisumu, Kenya",
+                        title: "SkillConnect - Western Region",
+                        info: "Kisumu, Kenya<br/>Western Kenya Operations"
+                      },
+                      {
+                        position: "Nakuru, Kenya",
+                        title: "SkillConnect - Rift Valley",
+                        info: "Nakuru, Kenya<br/>Rift Valley Operations"
+                      }
+                    ]}
+                    className="w-full h-full"
+                  />
+                </div>
+                <div className="mt-6 text-center">
+                  <p className="text-gray-600">
+                    <MapPin className="w-4 h-4 inline mr-2 text-orange-600" />
+                    Serving all 47 counties with online platform access
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Mission Section */}

@@ -1,526 +1,388 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import Link from "next/link"
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  SidebarInset,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from "@/components/ui/dialog"
+import {
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
+  SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton,
+  SidebarMenuItem, SidebarProvider, SidebarTrigger, SidebarInset,
 } from "@/components/ui/sidebar"
 import {
-  Home,
-  Users,
-  Briefcase,
-  Flag,
-  Shield,
-  Settings,
-  Bell,
-  Search,
-  TrendingUp,
-  Clock,
-  Eye,
-  CheckCircle,
-  XCircle,
-  LogOut,
-  FileText,
-  Building,
-  UserCheck,
-  Ban,
-  User,
-  ChevronDown,
-  Activity,
-  AlertTriangle,
-  UserX,
-  Monitor,
-  Database,
-  Server,
-  RefreshCw,
+  Home, Users, Briefcase, FileText, Settings, Bell, LogOut, Shield,
+  TrendingUp, Eye, AlertTriangle, CheckCircle, XCircle, Clock, 
+  BarChart3, Activity, UserCheck, UserX, Building, MapPin, DollarSign,
+  Calendar, Search, Filter, Plus, Edit, Trash, MoreHorizontal,
+  RefreshCw, Download, Upload, Zap, Brain, Target, Award
 } from "lucide-react"
-import Link from "next/link"
-import { AdminGuard } from "@/components/admin-auth-guard"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { supabase } from "@/lib/supabaseClient"
-import { UserActivityService } from "@/lib/userActivityService"
-import type { UserSession, UserActivity, AdminAction, UserWarning, SuspiciousActivity, DashboardStats } from "@/lib/userActivityService"
+import { AIServices } from "@/lib/aiServices"
+import { AdminGuard } from "@/components/admin-auth-guard"
 import { Logo } from "@/components/logo"
+import { AdminService, AdminStats, AdminUser, AdminJob, AdminApplication, AIInsight } from "@/lib/adminService"
+import { SupabaseConnectionTest } from "@/components/supabase-connection-test"
+
+interface RecentActivity {
+  id: string
+  type: string
+  title: string
+  description?: string
+  created_at: string
+}
 
 export default function AdminDashboard() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
-  const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState("overview")
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
-  
-  // Dashboard stats
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
-    active_sessions: 0,
-    logins_24h: 0,
-    activities_24h: 0,
-    pending_alerts: 0,
-    warnings_24h: 0
-  })
-  
-  // Data for different tabs
-  const [userSessions, setUserSessions] = useState<UserSession[]>([])
-  const [userActivities, setUserActivities] = useState<UserActivity[]>([])
-  const [suspiciousActivities, setSuspiciousActivities] = useState<SuspiciousActivity[]>([])
-  const [adminActions, setAdminActions] = useState<AdminAction[]>([])
-  const [userWarnings, setUserWarnings] = useState<UserWarning[]>([])
-  
-  // Legacy data (keeping for backward compatibility)
-  const [systemStats, setSystemStats] = useState({
+  const [stats, setStats] = useState<AdminStats>({
     totalUsers: 0,
-    activeJobs: 0,
-    pendingVerifications: 0,
-    flaggedContent: 0,
-    monthlyGrowth: 0,
-    successfulMatches: 0,
+    totalJobs: 0,
+    totalApplications: 0,
+    activeUsers: 0,
+    pendingApplications: 0,
+    suspiciousActivities: 0,
+    aiInsights: 0,
+    systemHealth: 'good'
   })
-  const [recentUsers, setRecentUsers] = useState([])
-  const [pendingVerifications, setPendingVerifications] = useState<any[]>([])
-  const [flaggedJobs, setFlaggedJobs] = useState<any[]>([])
-  const [adminUser, setAdminUser] = useState<any>(null)
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [jobs, setJobs] = useState<AdminJob[]>([])
+  const [applications, setApplications] = useState<AdminApplication[]>([])
+  const [aiInsights, setAiInsights] = useState<AIInsight[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
+  const [selectedJob, setSelectedJob] = useState<AdminJob | null>(null)
+  const [showUserModal, setShowUserModal] = useState(false)
+  const [showJobModal, setShowJobModal] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterRole, setFilterRole] = useState("all")
+  const [filterStatus, setFilterStatus] = useState("all")
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
 
-  // Admin user info
-  const adminName = adminUser?.first_name && adminUser?.last_name 
-    ? `${adminUser.first_name} ${adminUser.last_name}` 
-    : adminUser?.email || 'Admin User'
-  const adminRole = adminUser?.role || 'Administrator'
-
-  // Fetch admin dashboard data
   useEffect(() => {
-    fetchAdminData()
-    fetchMonitoringData()
-
-    // Set up automatic refresh every 30 seconds
-    const adminDataInterval = setInterval(fetchAdminData, 30000)
-    const monitoringDataInterval = setInterval(fetchMonitoringData, 30000)
-
-    // Subscribe to real-time changes in relevant tables
-    const channel = supabase
-      .channel('admin_dashboard_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        console.log('Profiles updated, refreshing admin data...')
-        fetchAdminData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => {
-        console.log('Jobs updated, refreshing admin data...')
-        fetchAdminData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, () => {
-        console.log('Applications updated, refreshing admin data...')
-        fetchAdminData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => {
-        console.log('Verifications updated, refreshing admin data...')
-        fetchAdminData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'flagged_content' }, () => {
-        console.log('Flagged content updated, refreshing admin data...')
-        fetchAdminData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_sessions' }, () => {
-        console.log('User sessions updated, refreshing monitoring data...')
-        fetchMonitoringData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_activities' }, () => {
-        console.log('User activities updated, refreshing monitoring data...')
-        fetchMonitoringData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'suspicious_activities' }, () => {
-        console.log('Suspicious activities updated, refreshing monitoring data...')
-        fetchMonitoringData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_actions' }, () => {
-        console.log('Admin actions updated, refreshing monitoring data...')
-        fetchMonitoringData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_warnings' }, () => {
-        console.log('User warnings updated, refreshing monitoring data...')
-        fetchMonitoringData();
-      })
-      .subscribe((status) => {
-        console.log('Real-time subscription status:', status)
-      });
-
-    return () => {
-      clearInterval(adminDataInterval)
-      clearInterval(monitoringDataInterval)
-      supabase.removeChannel(channel);
-    };
+    loadDashboardData()
   }, [])
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const data = localStorage.getItem("skillconnect_user")
-        setAdminUser(data ? JSON.parse(data) : null)
-      } catch (error) {
-        setAdminUser(null)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsUserMenuOpen(false)
-      }
-    }
-    if (isUserMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside)
-    } else {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [isUserMenuOpen])
-
-  const fetchAdminData = async () => {
+  const loadDashboardData = async () => {
+    setIsLoading(true)
     try {
-      if (!isRefreshing) setIsLoading(true)
-      
-      // Add timeout to prevent hanging requests
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), 10000)
-      )
-
-      // Fetch jobs count
-      const jobsPromise = supabase
-        .from('jobs')
-        .select('*', { count: 'exact' })
-
-      // Fetch applications count
-      const applicationsPromise = supabase
-        .from('applications')
-        .select('*', { count: 'exact' })
-
-      // Fetch users count and recent users
-      const usersPromise = supabase
-        .from('profiles')
-        .select('*', { count: 'exact' })
-
-      const recentUsersPromise = supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      // Fetch pending verifications
-      const verificationsPromise = supabase
-        .from('verifications')
-        .select('*')
-        .eq('status', 'pending')
-        .order('submitted_date', { ascending: false })
-        .limit(5)
-
-      // Fetch flagged content
-      const flaggedContentPromise = supabase
-        .from('flagged_content')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      // Fetch monthly growth data
-      const monthlyGrowthPromise = supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-
-      // Execute all promises with timeout
-      const [jobsResult, applicationsResult, usersResult, recentUsersResult, verificationsResult, flaggedContentResult, monthlyGrowthResult] = await Promise.all([
-        Promise.race([jobsPromise, timeoutPromise]),
-        Promise.race([applicationsPromise, timeoutPromise]),
-        Promise.race([usersPromise, timeoutPromise]),
-        Promise.race([recentUsersPromise, timeoutPromise]),
-        Promise.race([verificationsPromise, timeoutPromise]),
-        Promise.race([flaggedContentPromise, timeoutPromise]),
-        Promise.race([monthlyGrowthPromise, timeoutPromise])
-      ]) as any[]
-
-      // Calculate monthly growth percentage
-      const totalUsers = usersResult?.count || 0
-      const monthlyNewUsers = monthlyGrowthResult?.count || 0
-      const monthlyGrowth = totalUsers > 0 ? Math.round((monthlyNewUsers / totalUsers) * 100) : 0
-
-      // Update state with results
-      setSystemStats({
-        totalUsers: totalUsers,
-        activeJobs: jobsResult?.count || 0,
-        pendingVerifications: verificationsResult?.data?.length || 0,
-        flaggedContent: flaggedContentResult?.data?.length || 0,
-        monthlyGrowth: monthlyGrowth,
-        successfulMatches: applicationsResult?.count || 0,
-      })
-
-      setRecentUsers(recentUsersResult?.data || [])
-      setPendingVerifications(verificationsResult?.data || [])
-      setFlaggedJobs(flaggedContentResult?.data || [])
-      
-      setLastUpdated(new Date())
-
+      await Promise.all([
+        loadStats(),
+        loadUsers(),
+        loadJobs(),
+        loadApplications(),
+        loadAIInsights()
+      ])
     } catch (error) {
-      console.error('Error fetching admin data:', error)
-      // Set default values on error
-      setSystemStats({
-        totalUsers: 0,
-        activeJobs: 0,
-        pendingVerifications: 0,
-        flaggedContent: 0,
-        monthlyGrowth: 0,
-        successfulMatches: 0,
-      })
-      setRecentUsers([])
-      setPendingVerifications([])
-      setFlaggedJobs([])
+      console.error('Error loading dashboard data:', error)
     } finally {
       setIsLoading(false)
-      setIsRefreshing(false)
     }
   }
 
-  const fetchMonitoringData = async () => {
+  const loadStats = async () => {
     try {
-      // Fetch dashboard stats
-      const stats = await UserActivityService.getDashboardStats()
-      setDashboardStats(stats)
+      const stats = await AdminService.loadStats()
+      setStats(stats)
 
-      // Fetch data for different tabs - handle each individually to prevent one failure from breaking all
-      let sessions: UserSession[] = []
-      let activities: UserActivity[] = []
-      let alerts: SuspiciousActivity[] = []
-      let actions: AdminAction[] = []
-      let warnings: UserWarning[] = []
+      // Load recent activities
+      const { data: recentActivities } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          jobs(title, company),
+          profiles(first_name, last_name)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(5)
 
-      try {
-        sessions = await UserActivityService.getUserSessions()
-      } catch (error) {
-        console.warn('Error fetching user sessions:', error)
+      // Set recent activities
+      if (recentActivities) {
+        const activities = recentActivities.map(activity => ({
+          id: activity.id,
+          type: 'application',
+          title: 'New application submitted',
+          description: `${activity.profiles?.first_name} ${activity.profiles?.last_name} applied to ${activity.jobs?.title} at ${activity.jobs?.company}`,
+          created_at: activity.created_at
+        }))
+        setRecentActivities(activities)
       }
-
-      try {
-        activities = await UserActivityService.getUserActivities()
-      } catch (error) {
-        console.warn('Error fetching user activities:', error)
-      }
-
-      try {
-        alerts = await UserActivityService.getSuspiciousActivities(false)
-      } catch (error) {
-        console.warn('Error fetching suspicious activities:', error)
-      }
-
-      try {
-        actions = await UserActivityService.getAdminActions()
-      } catch (error) {
-        console.warn('Error fetching admin actions:', error)
-      }
-
-      try {
-        warnings = await UserActivityService.getUserWarnings()
-      } catch (error) {
-        console.warn('Error fetching user warnings:', error)
-      }
-
-      setUserSessions(sessions)
-      setUserActivities(activities)
-      setSuspiciousActivities(alerts)
-      setAdminActions(actions)
-      setUserWarnings(warnings)
-      
-      setLastUpdated(new Date())
-
     } catch (error) {
-      console.error('Error fetching monitoring data:', error)
-      // Set default values on error
-      setDashboardStats({
-        active_sessions: 0,
-        logins_24h: 0,
-        activities_24h: 0,
-        pending_alerts: 0,
-        warnings_24h: 0
-      })
-      setUserSessions([])
-      setUserActivities([])
-      setSuspiciousActivities([])
-      setAdminActions([])
-      setUserWarnings([])
+      console.error('Error loading stats:', error)
     }
   }
 
-  const handleVerificationAction = (id: number, action: "approve" | "reject") => {
-    console.log(`Verification ${action}:`, id)
-    // Implement verification action logic
-  }
-
-  const handleJobModeration = (id: number, action: "approve" | "remove") => {
-    console.log(`Job moderation ${action}:`, id)
-    // Implement job moderation logic
-  }
-
-  const handleUserAction = (id: number, action: "suspend" | "activate" | "ban") => {
-    console.log(`User action ${action}:`, id)
-    // Implement user action logic
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem("skillconnect_user")
-    sessionStorage.removeItem("skillconnect_session")
-    window.location.href = "/auth/login"
-  }
-
-  const handleAdminAction = async (targetUserId: string, actionType: AdminAction['action_type'], reason: string) => {
+  const loadUsers = async () => {
     try {
-      if (!adminUser?.id) return
-      
-      await UserActivityService.takeAdminAction(
-        adminUser.id,
-        targetUserId,
-        actionType,
-        reason
-      )
-      
-      // Refresh data
-      fetchMonitoringData()
+      const users = await AdminService.loadUsers()
+      setUsers(users)
     } catch (error) {
-      console.error('Error taking admin action:', error)
+      console.error('Error loading users:', error)
+      // Handle RLS policy errors gracefully
+      if (error?.message?.includes('infinite recursion') || error?.message?.includes('row-level security')) {
+        setUsers([])
+        // Show a helpful message in the UI
+        console.warn('RLS policy error detected. Please run the SQL fix in Supabase dashboard.')
+      }
     }
   }
 
-  const handleResolveAlert = async (alertId: string) => {
+  const loadJobs = async () => {
     try {
-      if (!adminUser?.id) return
-      
-      await UserActivityService.resolveSuspiciousActivity(alertId, adminUser.id)
-      
-      // Refresh data
-      fetchMonitoringData()
+      const jobs = await AdminService.loadJobs()
+      setJobs(jobs)
     } catch (error) {
-      console.error('Error resolving alert:', error)
+      console.error('Error loading jobs:', error)
     }
   }
 
-  const handleIssueWarning = async (userId: string, warningType: string, message: string, severity: UserWarning['severity'] = 'medium') => {
+  const loadApplications = async () => {
     try {
-      if (!adminUser?.id) return
-      
-      await UserActivityService.issueWarning(
-        adminUser.id,
-        userId,
-        warningType,
-        message,
-        severity
-      )
-      
-      // Refresh data
-      fetchMonitoringData()
+      const applications = await AdminService.loadApplications()
+      setApplications(applications)
     } catch (error) {
-      console.error('Error issuing warning:', error)
+      console.error('Error loading applications:', error)
     }
+  }
+
+  const loadAIInsights = async () => {
+    try {
+      const insights = await AdminService.loadAIInsights(50)
+      setAiInsights(insights)
+    } catch (error) {
+      console.error('Error loading AI insights:', error)
+      setAiInsights([])
+    }
+  }
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    console.log('Setting up real-time subscriptions...')
+    
+    // Subscribe to users changes
+    const usersSubscription = AdminService.subscribeToUsers((updatedUsers) => {
+      console.log('Users updated via subscription:', updatedUsers.length)
+      setUsers(updatedUsers)
+    })
+
+    // Subscribe to jobs changes
+    const jobsSubscription = AdminService.subscribeToJobs((updatedJobs) => {
+      console.log('Jobs updated via subscription:', updatedJobs.length)
+      setJobs(updatedJobs)
+    })
+
+    // Subscribe to applications changes
+    const applicationsSubscription = AdminService.subscribeToApplications((updatedApplications) => {
+      console.log('Applications updated via subscription:', updatedApplications.length)
+      setApplications(updatedApplications)
+    })
+
+    // Subscribe to stats changes
+    const statsSubscription = AdminService.subscribeToStats((updatedStats) => {
+      console.log('Stats updated via subscription')
+      setStats(updatedStats)
+    })
+
+    // Subscribe to AI insights changes
+    const insightsSubscription = AdminService.subscribeToAIInsights((updatedInsights) => {
+      console.log('AI Insights updated via subscription:', updatedInsights.length)
+      setAiInsights(updatedInsights)
+    })
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      console.log('Cleaning up real-time subscriptions...')
+      AdminService.unsubscribeFromAll()
+    }
+  }, [])
+
+  const handleUserAction = async (userId: string, action: 'suspend' | 'ban' | 'activate') => {
+    try {
+      const status = action === 'activate' ? 'active' : action === 'suspend' ? 'suspended' : 'banned'
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      // Refresh users list
+      await loadUsers()
+      setShowUserModal(false)
+    } catch (error) {
+      console.error('Error updating user status:', error)
+    }
+  }
+
+  const handleJobAction = async (jobId: string, action: 'approve' | 'reject' | 'feature') => {
+    try {
+      let status = 'active'
+      if (action === 'reject') status = 'closed'
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({ status })
+        .eq('id', jobId)
+
+      if (error) throw error
+
+      // Refresh jobs list
+      await loadJobs()
+      setShowJobModal(false)
+    } catch (error) {
+      console.error('Error updating job status:', error)
+    }
+  }
+
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesRole = filterRole === 'all' || user.role === filterRole
+    const matchesStatus = filterStatus === 'all' || user.status === filterStatus
+    return matchesSearch && matchesRole && matchesStatus
+  })
+
+  const getSystemHealthColor = (health: string) => {
+    switch (health) {
+      case 'excellent': return 'text-green-600'
+      case 'good': return 'text-blue-600'
+      case 'warning': return 'text-yellow-600'
+      case 'critical': return 'text-red-600'
+      default: return 'text-gray-600'
+    }
+  }
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'bg-red-100 text-red-800'
+      case 'high': return 'bg-orange-100 text-orange-800'
+      case 'medium': return 'bg-yellow-100 text-yellow-800'
+      case 'low': return 'bg-green-100 text-green-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <AdminGuard>
+        <div className="min-h-screen bg-light-gradient flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading Admin Dashboard...</p>
+          </div>
+        </div>
+      </AdminGuard>
+    )
   }
 
   return (
     <AdminGuard>
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-light-gradient">
         <SidebarProvider>
-          <div className="flex h-screen">
-            {/* Sidebar */}
-            <Sidebar>
+          <div className="flex min-h-screen w-full">
+            <Sidebar className="border-r border-red-200 bg-white shadow-lg">
               <SidebarHeader>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton className="flex items-center gap-2">
-                      <Logo className="w-8 h-8" noLink={true} showTagline={false} />
-                      <span className="font-bold text-xl">Admin Panel</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
+                <div className="px-4 py-4">
+                  <Logo showTagline={false} />
+                </div>
               </SidebarHeader>
+
               <SidebarContent>
                 <SidebarGroup>
-                  <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+                  <SidebarGroupLabel className="text-gray-600 font-semibold uppercase tracking-wide text-xs px-4">
+                    Administration
+                  </SidebarGroupLabel>
                   <SidebarGroupContent>
                     <SidebarMenu>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/dashboard/admin" className="flex items-center gap-2">
-                            <Home className="w-4 h-4" />
-                            <span>Dashboard</span>
+                        <SidebarMenuButton
+                          asChild
+                          isActive
+                          className="text-gray-700 hover:text-red-600 hover:bg-red-50 data-[active=true]:bg-red-100 data-[active=true]:text-red-700 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/admin">
+                            <Shield className="w-5 h-5" />
+                            <span className="font-medium">Dashboard</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/dashboard/admin/users" className="flex items-center gap-2">
-                            <Users className="w-4 h-4" />
-                            <span>Users</span>
+                        <SidebarMenuButton
+                          asChild
+                          className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/admin/users">
+                            <Users className="w-5 h-5" />
+                            <span className="font-medium">User Management</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/dashboard/admin/jobs" className="flex items-center gap-2">
-                            <Briefcase className="w-4 h-4" />
-                            <span>Jobs</span>
+                        <SidebarMenuButton
+                          asChild
+                          className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/admin/jobs">
+                            <Briefcase className="w-5 h-5" />
+                            <span className="font-medium">Job Moderation</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/dashboard/admin/verifications" className="flex items-center gap-2">
-                            <Shield className="w-4 h-4" />
-                            <span>Verifications</span>
+                        <SidebarMenuButton
+                          asChild
+                          className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/admin/ai">
+                            <Brain className="w-5 h-5" />
+                            <span className="font-medium">AI Insights</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/dashboard/admin/moderation" className="flex items-center gap-2">
-                            <Flag className="w-4 h-4" />
-                            <span>Moderation</span>
+                        <SidebarMenuButton
+                          asChild
+                          className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/admin/analytics">
+                            <BarChart3 className="w-5 h-5" />
+                            <span className="font-medium">Analytics</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     </SidebarMenu>
                   </SidebarGroupContent>
                 </SidebarGroup>
-                
+
                 <SidebarGroup>
-                  <SidebarGroupLabel>Monitoring</SidebarGroupLabel>
+                  <SidebarGroupLabel className="text-gray-600 font-semibold uppercase tracking-wide text-xs px-4">
+                    System
+                  </SidebarGroupLabel>
                   <SidebarGroupContent>
                     <SidebarMenu>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/dashboard/admin/monitoring" className="flex items-center gap-2">
-                            <Monitor className="w-4 h-4" />
-                            <span>System Monitoring</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/dashboard/admin/logs" className="flex items-center gap-2">
-                            <Database className="w-4 h-4" />
-                            <span>Activity Logs</span>
+                        <SidebarMenuButton
+                          asChild
+                          className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/admin/settings">
+                            <Settings className="w-5 h-5" />
+                            <span className="font-medium">Settings</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -528,723 +390,571 @@ export default function AdminDashboard() {
                   </SidebarGroupContent>
                 </SidebarGroup>
               </SidebarContent>
+
               <SidebarFooter>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={handleLogout} className="flex items-center gap-2">
-                      <LogOut className="w-4 h-4" />
-                      <span>Logout</span>
+                    <SidebarMenuButton
+                      asChild
+                      className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium"
+                    >
+                      <Link href="/auth/login">
+                        <LogOut className="w-5 h-5" />
+                        <span className="font-medium">Sign Out</span>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarFooter>
             </Sidebar>
 
-            {/* Main Content */}
-            <SidebarInset>
-              <main className="flex-1 overflow-y-auto">
+            <SidebarInset className="bg-transparent">
+              <main className="flex-1 space-y-6 p-6">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between">
                   <div>
                     <h1 className="text-3xl font-bold text-slate-900">Admin Dashboard</h1>
-                    <p className="text-slate-600">Monitor and manage your platform</p>
+                    <p className="text-slate-600 mt-1">Monitor and manage the platform</p>
                   </div>
-                  <div className="flex items-center space-x-4">
-                    <div className="text-sm text-slate-500">
-                      Last updated: {lastUpdated.toLocaleTimeString()}
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsRefreshing(true)
-                        fetchAdminData()
-                        fetchMonitoringData()
-                      }}
-                      disabled={isRefreshing}
+                  <div className="flex items-center space-x-3">
+                    <Button 
+                      onClick={loadDashboardData} 
+                      variant="outline" 
+                      disabled={isLoading}
                       className="flex items-center space-x-2"
                     >
-                      <div className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}>
-                        <RefreshCw className="w-4 h-4" />
-                      </div>
-                      <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+                      <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                      <span>Refresh All Data</span>
                     </Button>
-                    <div className="relative" ref={dropdownRef}>
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                        className="flex items-center space-x-2"
-                      >
-                        <User className="w-4 h-4" />
-                        <span>{adminName}</span>
-                        <ChevronDown className="w-4 h-4" />
-                      </Button>
-                      {isUserMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-50">
-                          <div className="py-1">
-                            <div className="px-4 py-2 text-sm text-slate-700 border-b border-slate-100">
-                              <div className="font-medium">{adminName}</div>
-                              <div className="text-slate-500">{adminRole}</div>
-                            </div>
-                            <button
-                              onClick={handleLogout}
-                              className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
-                            >
-                              <LogOut className="w-4 h-4 inline mr-2" />
-                              Logout
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                    <Badge variant="outline" className="text-sm">
+                      {users.length} Users • {jobs.length} Jobs • {applications.length} Applications
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Welcome Section */}
+                <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-6 text-white">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold mb-2">
+                        Welcome to Admin Dashboard
+                      </h2>
+                      <p className="text-red-100">
+                        Monitor platform activity, manage users, and leverage AI insights
+                      </p>
+                    </div>
+                    <div className="hidden md:block">
+                      <Shield className="w-16 h-16 text-red-200" />
                     </div>
                   </div>
                 </div>
 
-                {/* Loading State */}
-                {isLoading ? (
-                  <div className="p-6 space-y-6">
-                    {/* Loading skeleton for stats cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                      {[...Array(5)].map((_, i) => (
-                        <Card key={i} className="bg-orange-50 border-orange-100">
-                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <div className="h-4 bg-orange-200 rounded w-24 animate-pulse"></div>
-                            <div className="h-4 w-4 bg-orange-200 rounded animate-pulse"></div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="h-8 bg-orange-200 rounded w-16 animate-pulse mb-2"></div>
-                            <div className="h-3 bg-orange-200 rounded w-20 animate-pulse"></div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                {/* Stats Grid */}
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">Total Users</p>
+                          <p className="text-2xl font-bold text-slate-900">{stats.totalUsers}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                          <Users className="w-6 h-6 text-blue-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">Active Jobs</p>
+                          <p className="text-2xl font-bold text-slate-900">{stats.totalJobs}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                          <Briefcase className="w-6 h-6 text-green-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">Applications</p>
+                          <p className="text-2xl font-bold text-slate-900">{stats.totalApplications}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                          <FileText className="w-6 h-6 text-purple-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">System Health</p>
+                          <p className={`text-2xl font-bold ${getSystemHealthColor(stats.systemHealth)}`}>
+                            {stats.systemHealth}
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                          <Activity className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid gap-8 lg:grid-cols-2">
+                  {/* AI Insights */}
+                  <Card className="simple-card">
+                    <CardHeader>
+                      <CardTitle className="text-slate-900 flex items-center">
+                        <Brain className="w-5 h-5 mr-2 text-red-600" />
+                        AI Insights
+                      </CardTitle>
+                      <CardDescription className="text-slate-600">
+                        Recent AI-powered security and content insights
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {aiInsights.slice(0, 5).map((insight) => (
+                          <div
+                            key={insight.id}
+                            className="flex items-start space-x-3 p-3 rounded-lg border bg-slate-50"
+                          >
+                            <div className={`w-2 h-2 rounded-full mt-2 ${
+                              insight.severity === 'critical' ? 'bg-red-500' :
+                              insight.severity === 'high' ? 'bg-orange-500' :
+                              insight.severity === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                            }`}></div>
+                            <div className="flex-1">
+                              <h4 className="font-medium text-slate-900">{insight.title}</h4>
+                              <p className="text-sm text-slate-600">{insight.description}</p>
+                              <div className="flex items-center space-x-2 mt-2">
+                                <Badge className={getSeverityColor(insight.severity)}>
+                                  {insight.severity}
+                                </Badge>
+                                <Badge variant="outline">{insight.status}</Badge>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <Button variant="outline" className="w-full mt-4 btn-secondary" asChild>
+                        <Link href="/dashboard/admin/ai">View All Insights</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Recent Activity */}
+                  <Card className="simple-card">
+                    <CardHeader>
+                      <CardTitle className="text-slate-900 flex items-center">
+                        <Activity className="w-5 h-5 mr-2 text-red-600" />
+                        Recent Activity
+                      </CardTitle>
+                      <CardDescription className="text-slate-600">
+                        Latest platform activities and user actions
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {recentActivities.length > 0 ? (
+                          recentActivities.map((activity) => (
+                            <div key={activity.id} className="flex items-center space-x-3">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-slate-900">{activity.title}</p>
+                                <p className="text-xs text-slate-500">
+                                  {new Date(activity.created_at).toLocaleString()}
+                                </p>
+                                {activity.description && (
+                                  <p className="text-xs text-slate-600 mt-1">{activity.description}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-slate-500">
+                            <p className="text-sm">No recent activity</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* User Management Section */}
+                <Card className="simple-card">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-slate-900">User Management</CardTitle>
+                        <CardDescription className="text-slate-600">
+                          Monitor and manage platform users
+                        </CardDescription>
+                      </div>
+                      <Button onClick={loadUsers} variant="outline" size="sm">
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Refresh
+                      </Button>
                     </div>
-                    
-                    {/* Loading skeleton for system stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[...Array(3)].map((_, i) => (
-                        <Card key={i} className="bg-orange-50 border-orange-100">
-                          <CardHeader>
-                            <div className="h-6 bg-orange-200 rounded w-32 animate-pulse mb-2"></div>
-                            <div className="h-4 bg-orange-200 rounded w-48 animate-pulse"></div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="h-10 bg-orange-200 rounded w-20 animate-pulse mb-2"></div>
-                            <div className="h-4 bg-orange-200 rounded w-24 animate-pulse"></div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* Monitoring Dashboard with Tabs */}
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                      <div className="px-6 pt-6">
-                        <TabsList className="grid w-full grid-cols-7">
-                          <TabsTrigger value="overview" className="flex items-center gap-2">
-                            <Home className="w-4 h-4" />
-                            Overview
-                          </TabsTrigger>
-                          <TabsTrigger value="sessions" className="flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            Sessions
-                          </TabsTrigger>
-                          <TabsTrigger value="activities" className="flex items-center gap-2">
-                            <Activity className="w-4 h-4" />
-                            Activities
-                          </TabsTrigger>
-                          <TabsTrigger value="alerts" className="flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4" />
-                            Alerts
-                          </TabsTrigger>
-                          <TabsTrigger value="actions" className="flex items-center gap-2">
-                            <Shield className="w-4 h-4" />
-                            Admin Actions
-                          </TabsTrigger>
-                          <TabsTrigger value="warnings" className="flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4" />
-                            Warnings
-                          </TabsTrigger>
-                          <TabsTrigger value="system" className="flex items-center gap-2">
-                            <Server className="w-4 h-4" />
-                            System
-                          </TabsTrigger>
-                        </TabsList>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {/* Search and Filters */}
+                      <div className="flex flex-col lg:flex-row gap-4">
+                        <div className="relative flex-grow">
+                          <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                          <Input
+                            placeholder="Search users..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Filter className="w-4 h-4 text-slate-500" />
+                          <Select value={filterRole} onValueChange={setFilterRole}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="Role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Roles</SelectItem>
+                              <SelectItem value="seeker">Seekers</SelectItem>
+                              <SelectItem value="employer">Employers</SelectItem>
+                              <SelectItem value="admin">Admins</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select value={filterStatus} onValueChange={setFilterStatus}>
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Status</SelectItem>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="suspended">Suspended</SelectItem>
+                              <SelectItem value="banned">Banned</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
-                      {/* Overview Tab */}
-                      <TabsContent value="overview" className="w-full">
-                        <div className="p-6">
-                          <Card className="w-full">
-                            <CardHeader>
-                              <CardTitle className="flex items-center text-slate-900">
-                                <Home className="w-5 h-5 mr-2 text-orange-600" />
-                                Dashboard Overview
-                              </CardTitle>
-                              <CardDescription className="text-slate-600">
-                                Real-time monitoring and system statistics
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 w-full">
-                                {/* Stat Cards - Consistent Styling */}
-                                <Card className="rounded-xl border border-orange-100 bg-white shadow-sm transition-all">
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium text-slate-900">Active Sessions</CardTitle>
-                                    <Clock className="h-5 w-5 text-orange-600" />
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold text-slate-900">{dashboardStats.active_sessions}</div>
-                                    <p className="text-xs text-muted-foreground">Current</p>
-                                  </CardContent>
-                                </Card>
-                                <Card className="rounded-xl border border-blue-100 bg-white shadow-sm transition-all">
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium text-slate-900">Logins (24h)</CardTitle>
-                                    <TrendingUp className="h-5 w-5 text-blue-600" />
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold text-slate-900">{dashboardStats.logins_24h}</div>
-                                    <p className="text-xs text-muted-foreground">Last 24 hours</p>
-                                  </CardContent>
-                                </Card>
-                                <Card className="rounded-xl border border-green-100 bg-white shadow-sm transition-all">
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium text-slate-900">Activities (24h)</CardTitle>
-                                    <Activity className="h-5 w-5 text-green-600" />
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold text-slate-900">{dashboardStats.activities_24h}</div>
-                                    <p className="text-xs text-muted-foreground">Last 24 hours</p>
-                                  </CardContent>
-                                </Card>
-                                <Card className="rounded-xl border border-red-100 bg-white shadow-sm transition-all">
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium text-slate-900">Pending Alerts</CardTitle>
-                                    <AlertTriangle className="h-5 w-5 text-red-500" />
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold text-red-600">{dashboardStats.pending_alerts}</div>
-                                    <p className="text-xs text-muted-foreground">Unresolved</p>
-                                  </CardContent>
-                                </Card>
-                                <Card className="rounded-xl border border-yellow-100 bg-white shadow-sm transition-all">
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium text-slate-900">Warnings (24h)</CardTitle>
-                                    <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold text-yellow-600">{dashboardStats.warnings_24h}</div>
-                                    <p className="text-xs text-muted-foreground">Last 24 hours</p>
-                                  </CardContent>
-                                </Card>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-                      </TabsContent>
-
-                      {/* Sessions Tab */}
-                      <TabsContent value="sessions" className="w-full">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>User Sessions</CardTitle>
-                            <CardDescription>Monitor active user sessions and login activity</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>User ID</TableHead>
-                                  <TableHead>IP Address</TableHead>
-                                  <TableHead>Device</TableHead>
-                                  <TableHead>Browser</TableHead>
-                                  <TableHead>Login Time</TableHead>
-                                  <TableHead>Status</TableHead>
-                                  <TableHead>Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {userSessions.map((session) => (
-                                  <TableRow key={session.id}>
-                                    <TableCell>{session.user_id}</TableCell>
-                                    <TableCell>{session.ip_address}</TableCell>
-                                    <TableCell>{session.device_type}</TableCell>
-                                    <TableCell>{session.browser}</TableCell>
-                                    <TableCell>{new Date(session.login_time).toLocaleString()}</TableCell>
-                                    <TableCell>
-                                      <Badge variant={session.is_active ? "default" : "secondary"}>
-                                        {session.is_active ? "Active" : "Inactive"}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleAdminAction(session.user_id, 'suspend', 'Suspicious session activity')}
-                                      >
-                                        <Ban className="w-3 h-3" />
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-
-                      {/* Activities Tab */}
-                      <TabsContent value="activities" className="w-full">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>User Activities</CardTitle>
-                            <CardDescription>Track user behavior and page interactions</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>User ID</TableHead>
-                                  <TableHead>Activity Type</TableHead>
-                                  <TableHead>Page URL</TableHead>
-                                  <TableHead>IP Address</TableHead>
-                                  <TableHead>Time</TableHead>
-                                  <TableHead>Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {userActivities.map((activity) => (
-                                  <TableRow key={activity.id}>
-                                    <TableCell>{activity.user_id}</TableCell>
-                                    <TableCell>{activity.activity_type}</TableCell>
-                                    <TableCell>{activity.page_url}</TableCell>
-                                    <TableCell>{activity.ip_address}</TableCell>
-                                    <TableCell>{new Date(activity.created_at).toLocaleString()}</TableCell>
-                                    <TableCell>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleIssueWarning(activity.user_id, 'Suspicious Activity', 'Unusual activity pattern detected')}
-                                      >
-                                        <AlertTriangle className="w-3 h-3" />
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-
-                      {/* Alerts Tab */}
-                      <TabsContent value="alerts" className="w-full">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Suspicious Activities</CardTitle>
-                            <CardDescription>Security alerts and suspicious behavior detection</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>User ID</TableHead>
-                                  <TableHead>Alert Type</TableHead>
-                                  <TableHead>Severity</TableHead>
-                                  <TableHead>Status</TableHead>
-                                  <TableHead>Created</TableHead>
-                                  <TableHead>Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {suspiciousActivities.map((alert) => (
-                                  <TableRow key={alert.id}>
-                                    <TableCell>{alert.user_id}</TableCell>
-                                    <TableCell>{alert.alert_type}</TableCell>
-                                    <TableCell>
-                                      <Badge variant={
-                                        alert.severity === 'critical' ? 'destructive' :
-                                        alert.severity === 'high' ? 'default' :
-                                        alert.severity === 'medium' ? 'secondary' : 'outline'
-                                      }>
-                                        {alert.severity}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge variant={alert.is_resolved ? "secondary" : "default"}>
-                                        {alert.is_resolved ? "Resolved" : "Pending"}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>{new Date(alert.created_at).toLocaleString()}</TableCell>
-                                    <TableCell>
-                                      <div className="flex space-x-2">
-                                        {!alert.is_resolved && (
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => handleResolveAlert(alert.id)}
-                                          >
-                                            <CheckCircle className="w-3 h-3" />
-                                          </Button>
-                                        )}
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => handleAdminAction(alert.user_id, 'warn', `Alert: ${alert.alert_type}`)}
-                                        >
-                                          <AlertTriangle className="w-3 h-3" />
-                                        </Button>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-
-                      {/* Admin Actions Tab */}
-                      <TabsContent value="actions" className="w-full">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Admin Actions</CardTitle>
-                            <CardDescription>History of administrative actions taken</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Admin ID</TableHead>
-                                  <TableHead>Target User</TableHead>
-                                  <TableHead>Action</TableHead>
-                                  <TableHead>Reason</TableHead>
-                                  <TableHead>Status</TableHead>
-                                  <TableHead>Created</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {adminActions.map((action) => (
-                                  <TableRow key={action.id}>
-                                    <TableCell>{action.admin_id}</TableCell>
-                                    <TableCell>{action.target_user_id}</TableCell>
-                                    <TableCell>
-                                      <Badge variant={
-                                        action.action_type === 'ban' ? 'destructive' :
-                                        action.action_type === 'suspend' ? 'default' :
-                                        action.action_type === 'warn' ? 'secondary' : 'outline'
-                                      }>
-                                        {action.action_type}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>{action.reason}</TableCell>
-                                    <TableCell>
-                                      <Badge variant={action.is_active ? "default" : "secondary"}>
-                                        {action.is_active ? "Active" : "Expired"}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>{new Date(action.created_at).toLocaleString()}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-
-                      {/* Warnings Tab */}
-                      <TabsContent value="warnings" className="w-full">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>User Warnings</CardTitle>
-                            <CardDescription>Warnings issued to users for policy violations</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>User ID</TableHead>
-                                  <TableHead>Warning Type</TableHead>
-                                  <TableHead>Message</TableHead>
-                                  <TableHead>Severity</TableHead>
-                                  <TableHead>Acknowledged</TableHead>
-                                  <TableHead>Created</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {userWarnings.map((warning) => (
-                                  <TableRow key={warning.id}>
-                                    <TableCell>{warning.user_id}</TableCell>
-                                    <TableCell>{warning.warning_type}</TableCell>
-                                    <TableCell>{warning.message}</TableCell>
-                                    <TableCell>
-                                      <Badge variant={
-                                        warning.severity === 'critical' ? 'destructive' :
-                                        warning.severity === 'high' ? 'default' :
-                                        warning.severity === 'medium' ? 'secondary' : 'outline'
-                                      }>
-                                        {warning.severity}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge variant={warning.is_acknowledged ? "default" : "secondary"}>
-                                        {warning.is_acknowledged ? "Yes" : "No"}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>{new Date(warning.created_at).toLocaleString()}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-
-                      {/* System Tab */}
-                      <TabsContent value="system" className="w-full">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Pending Verifications */}
-                          <Card>
-                            <CardHeader>
-                              <CardTitle className="text-slate-900 flex items-center">
-                                <Shield className="w-5 h-5 mr-2 text-orange-600" />
-                                Pending Verifications
-                              </CardTitle>
-                              <CardDescription className="text-slate-600">
-                                Review and approve user verification requests
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="space-y-4">
-                                {pendingVerifications.map((verification) => (
-                                  <div
-                                    key={verification.id}
-                                    className="flex items-center justify-between p-4 bg-orange-50 rounded-2xl border border-orange-100 hover:bg-orange-100 transition-colors"
-                                  >
-                                    <div className="flex-1">
-                                      <h4 className="font-medium text-slate-900">{verification.user_name || 'N/A'}</h4>
-                                      <p className="text-slate-600">{verification.document_type || 'N/A'}</p>
-                                      <p className="text-xs text-slate-500">Submitted: {verification.submitted_date || 'N/A'}</p>
-                                    </div>
-                                    <div className="flex items-center space-x-3">
-                                      <Badge className="bg-orange-500 text-white border-0 rounded-xl">Pending</Badge>
-                                      <div className="flex space-x-2">
-                                        <Button
-                                          size="sm"
-                                          className="bg-green-500 hover:bg-green-600 text-white rounded-xl"
-                                          onClick={() => handleVerificationAction(verification.id, "approve")}
-                                        >
-                                          <CheckCircle className="w-3 h-3" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          className="bg-red-500 hover:bg-red-600 text-white rounded-xl"
-                                          onClick={() => handleVerificationAction(verification.id, "reject")}
-                                        >
-                                          <XCircle className="w-3 h-3" />
-                                        </Button>
-                                      </div>
-                                    </div>
+                      {/* Users Table */}
+                      <div className="border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>User</TableHead>
+                              <TableHead>Role</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>AI Risk</TableHead>
+                              <TableHead>Joined</TableHead>
+                              <TableHead>Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredUsers.slice(0, 10).map((user) => (
+                              <TableRow key={user.id}>
+                                <TableCell>
+                                  <div>
+                                    <p className="font-medium">{user.first_name} {user.last_name}</p>
+                                    <p className="text-sm text-slate-500">{user.email}</p>
                                   </div>
-                                ))}
-                              </div>
-                              <Button variant="outline" className="w-full mt-6 btn-secondary" asChild>
-                                <Link href="/dashboard/admin/verifications">View All Verifications</Link>
-                              </Button>
-                            </CardContent>
-                          </Card>
-
-                          {/* Flagged Jobs */}
-                          <Card>
-                            <CardHeader>
-                              <CardTitle className="text-slate-900 flex items-center">
-                                <Flag className="w-5 h-5 mr-2 text-orange-600" />
-                                Flagged Job Postings
-                              </CardTitle>
-                              <CardDescription className="text-slate-600">
-                                Review reported job postings for policy violations
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="space-y-4">
-                                {flaggedJobs.map((job) => (
-                                  <div
-                                    key={job.id}
-                                    className="flex items-center justify-between p-4 bg-orange-50 rounded-2xl border border-orange-100 hover:bg-orange-100 transition-colors"
-                                  >
-                                    <div className="flex-1">
-                                      <h4 className="font-medium text-slate-900">{job.title || 'N/A'}</h4>
-                                      <p className="text-slate-600">{job.company || 'N/A'}</p>
-                                      <p className="text-xs text-slate-500">Reason: {job.reason || 'N/A'}</p>
-                                      <p className="text-xs text-slate-500">Reported: {job.reportedDate || 'N/A'}</p>
-                                    </div>
-                                    <div className="flex items-center space-x-3">
-                                      <Badge className="bg-red-500 text-white border-0 rounded-xl">Flagged</Badge>
-                                      <div className="flex space-x-2">
-                                        <Button
-                                          size="sm"
-                                          className="bg-green-500 hover:bg-green-600 text-white rounded-xl"
-                                          onClick={() => handleJobModeration(job.id, "approve")}
-                                        >
-                                          <CheckCircle className="w-3 h-3" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          className="bg-red-500 hover:bg-red-600 text-white rounded-xl"
-                                          onClick={() => handleJobModeration(job.id, "remove")}
-                                        >
-                                          <Ban className="w-3 h-3" />
-                                        </Button>
-                                      </div>
-                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={
+                                    user.role === 'admin' ? 'border-red-200 text-red-700' :
+                                    user.role === 'employer' ? 'border-blue-200 text-blue-700' :
+                                    'border-green-200 text-green-700'
+                                  }>
+                                    {user.role}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={
+                                    user.status === 'active' ? 'bg-green-100 text-green-800' :
+                                    user.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  }>
+                                    {user.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <div className={`w-3 h-3 rounded-full ${
+                                      (user.aiRiskScore || 0) > 70 ? 'bg-red-500' :
+                                      (user.aiRiskScore || 0) > 40 ? 'bg-yellow-500' : 'bg-green-500'
+                                    }`}></div>
+                                    <span className="text-sm">{user.aiRiskScore || 0}%</span>
                                   </div>
-                                ))}
-                              </div>
-                              <Button variant="outline" className="w-full mt-6 btn-secondary" asChild>
-                                <Link href="/dashboard/admin/moderation">View All Flagged Content</Link>
-                              </Button>
-                            </CardContent>
-                          </Card>
-                        </div>
+                                </TableCell>
+                                <TableCell>
+                                  <p className="text-sm text-slate-600">
+                                    {new Date(user.created_at).toLocaleDateString()}
+                                  </p>
+                                </TableCell>
+                                <TableCell>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="sm">
+                                        <MoreHorizontal className="w-4 h-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                      <DropdownMenuItem onClick={() => {
+                                        setSelectedUser(user)
+                                        setShowUserModal(true)
+                                      }}>
+                                        <Eye className="w-4 h-4 mr-2" />
+                                        View Details
+                                      </DropdownMenuItem>
+                                      {user.status === 'active' ? (
+                                        <>
+                                          <DropdownMenuItem onClick={() => handleUserAction(user.id, 'suspend')}>
+                                            <AlertTriangle className="w-4 h-4 mr-2" />
+                                            Suspend
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem onClick={() => handleUserAction(user.id, 'ban')}>
+                                            <XCircle className="w-4 h-4 mr-2" />
+                                            Ban
+                                          </DropdownMenuItem>
+                                        </>
+                                      ) : (
+                                        <DropdownMenuItem onClick={() => handleUserAction(user.id, 'activate')}>
+                                          <CheckCircle className="w-4 h-4 mr-2" />
+                                          Activate
+                                        </DropdownMenuItem>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                        {/* Recent Users */}
-                        <Card>
-                          <CardHeader>
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <CardTitle className="text-slate-900 flex items-center">
-                                  <Users className="w-5 h-5 mr-2 text-orange-600" />
-                                  Recent User Activity
-                                </CardTitle>
-                                <CardDescription className="text-slate-600">
-                                  Monitor new user registrations and activity
-                                </CardDescription>
-                              </div>
-                              <div className="flex items-center space-x-3">
-                                <div className="relative">
-                                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
-                                  <Input
-                                    placeholder="Search users..."
-                                    className="pl-8 w-64 form-input"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                  />
-                                </div>
-                                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                                  <SelectTrigger className="w-32 form-input">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white border-orange-200">
-                                    <SelectItem value="all" className="text-slate-900 hover:bg-orange-50">
-                                      All Status
-                                    </SelectItem>
-                                    <SelectItem value="active" className="text-slate-900 hover:bg-orange-50">
-                                      Active
-                                    </SelectItem>
-                                    <SelectItem value="suspended" className="text-slate-900 hover:bg-orange-50">
-                                      Suspended
-                                    </SelectItem>
-                                    <SelectItem value="banned" className="text-slate-900 hover:bg-orange-50">
-                                      Banned
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="bg-orange-50 rounded-2xl border border-orange-100 overflow-hidden">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="border-orange-100 hover:bg-orange-100">
-                                    <TableHead className="text-slate-700">User</TableHead>
-                                    <TableHead className="text-slate-700">Role</TableHead>
-                                    <TableHead className="text-slate-700">Join Date</TableHead>
-                                    <TableHead className="text-slate-700">Activity</TableHead>
-                                    <TableHead className="text-slate-700">Status</TableHead>
-                                    <TableHead className="text-slate-700">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {recentUsers.map((user) => (
-                                    <TableRow key={user.id} className="border-orange-100 hover:bg-orange-100">
-                                      <TableCell>
-                                        <div>
-                                          <div className="font-medium text-slate-900">{user.name || user.email || 'N/A'}</div>
-                                          <div className="text-sm text-slate-600">{user.email || 'N/A'}</div>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell>
-                                        <Badge
-                                          className={`${user.role === "seeker" ? "bg-blue-500" : "bg-green-500"} text-white border-0 rounded-xl`}
-                                        >
-                                          {user.role === "seeker" ? (
-                                            <Users className="w-3 h-3 mr-1" />
-                                          ) : (
-                                            <Building className="w-3 h-3 mr-1" />
-                                          )}
-                                          {user.role || 'N/A'}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell className="text-slate-600">{user.joinDate || 'N/A'}</TableCell>
-                                      <TableCell className="text-slate-600">
-                                        {user.role === "seeker"
-                                          ? `${user.applications} applications`
-                                          : `${user.jobsPosted} jobs posted`}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Badge
-                                          className={`${
-                                            user.status === "active"
-                                              ? "bg-green-500"
-                                              : user.status === "suspended"
-                                                ? "bg-red-500"
-                                                : "bg-gray-500"
-                                          } text-white border-0 rounded-xl`}
-                                        >
-                                          {user.status || 'N/A'}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell>
-                                        <div className="flex space-x-2">
-                                          <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white rounded-xl">
-                                            <Eye className="w-3 h-3" />
-                                          </Button>
-                                          {user.status === "active" ? (
-                                            <Button
-                                              size="sm"
-                                              className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl"
-                                              onClick={() => handleUserAction(user.id, "suspend")}
-                                            >
-                                              <Ban className="w-3 h-3" />
-                                            </Button>
-                                          ) : (
-                                            <Button
-                                              size="sm"
-                                              className="bg-green-500 hover:bg-green-600 text-white rounded-xl"
-                                              onClick={() => handleUserAction(user.id, "activate")}
-                                            >
-                                              <UserCheck className="w-3 h-3" />
-                                            </Button>
-                                          )}
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-                    </Tabs>
-                  </>
+                {/* Quick Actions */}
+                <div className="grid gap-6 md:grid-cols-3">
+                  <Card className="simple-card">
+                    <CardHeader>
+                      <CardTitle className="text-slate-900 flex items-center">
+                        <Zap className="w-5 h-5 mr-2 text-red-600" />
+                        AI Analysis
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-slate-600 mb-4">
+                        Run comprehensive AI analysis on platform content and user behavior
+                      </p>
+                      <Button className="w-full" asChild>
+                        <Link href="/dashboard/admin/ai">
+                          <Brain className="w-4 h-4 mr-2" />
+                          Run AI Scan
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardHeader>
+                      <CardTitle className="text-slate-900 flex items-center">
+                        <BarChart3 className="w-5 h-5 mr-2 text-red-600" />
+                        Analytics
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-slate-600 mb-4">
+                        View detailed platform analytics and performance metrics
+                      </p>
+                      <Button className="w-full" asChild>
+                        <Link href="/dashboard/admin/analytics">
+                          <TrendingUp className="w-4 h-4 mr-2" />
+                          View Analytics
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardHeader>
+                      <CardTitle className="text-slate-900 flex items-center">
+                        <Settings className="w-5 h-5 mr-2 text-red-600" />
+                        System Settings
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-slate-600 mb-4">
+                        Configure platform settings and security parameters
+                      </p>
+                      <Button className="w-full" asChild>
+                        <Link href="/dashboard/admin/settings">
+                          <Settings className="w-4 h-4 mr-2" />
+                          Manage Settings
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Debug Panel - Only show in development */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="space-y-4">
+                    <SupabaseConnectionTest />
+                    
+                    <Card className="simple-card border-orange-200 bg-orange-50">
+                      <CardHeader>
+                        <CardTitle className="text-orange-900 flex items-center">
+                          <Zap className="w-5 h-5 mr-2" />
+                          Debug Panel (Development Only)
+                        </CardTitle>
+                        <CardDescription className="text-orange-700">
+                          Real-time data monitoring and subscription status
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div className="bg-white p-3 rounded-lg border">
+                            <p className="font-medium text-orange-900">Users Loaded</p>
+                            <p className="text-2xl font-bold text-orange-600">{users.length}</p>
+                            <p className="text-xs text-orange-600">Real-time</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg border">
+                            <p className="font-medium text-orange-900">Jobs Loaded</p>
+                            <p className="text-2xl font-bold text-orange-600">{jobs.length}</p>
+                            <p className="text-xs text-orange-600">Real-time</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg border">
+                            <p className="font-medium text-orange-900">Applications</p>
+                            <p className="text-2xl font-bold text-orange-600">{applications.length}</p>
+                            <p className="text-xs text-orange-600">Real-time</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg border">
+                            <p className="font-medium text-orange-900">AI Insights</p>
+                            <p className="text-2xl font-bold text-orange-600">{aiInsights.length}</p>
+                            <p className="text-xs text-orange-600">Real-time</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 p-3 bg-white rounded-lg border">
+                          <p className="font-medium text-orange-900 mb-2">Subscription Status</p>
+                          <div className="flex items-center space-x-4 text-xs">
+                            <span className="flex items-center">
+                              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                              Users: Active
+                            </span>
+                            <span className="flex items-center">
+                              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                              Jobs: Active
+                            </span>
+                            <span className="flex items-center">
+                              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                              Applications: Active
+                            </span>
+                            <span className="flex items-center">
+                              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                              Stats: Active
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 )}
               </main>
             </SidebarInset>
           </div>
         </SidebarProvider>
+
+        {/* User Details Modal */}
+        <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>User Details</DialogTitle>
+            </DialogHeader>
+            {selectedUser && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Name</Label>
+                    <p className="text-sm font-medium">{selectedUser.first_name} {selectedUser.last_name}</p>
+                  </div>
+                  <div>
+                    <Label>Email</Label>
+                    <p className="text-sm font-medium">{selectedUser.email}</p>
+                  </div>
+                  <div>
+                    <Label>Role</Label>
+                    <Badge variant="outline">{selectedUser.role}</Badge>
+                  </div>
+                  <div>
+                    <Label>Status</Label>
+                    <Badge className={
+                      selectedUser.status === 'active' ? 'bg-green-100 text-green-800' :
+                      selectedUser.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }>
+                      {selectedUser.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label>AI Risk Score</Label>
+                    <p className="text-sm font-medium">{selectedUser.aiRiskScore || 0}%</p>
+                  </div>
+                  <div>
+                    <Label>Joined</Label>
+                    <p className="text-sm font-medium">{new Date(selectedUser.created_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                
+                {selectedUser.aiFlags && selectedUser.aiFlags.length > 0 && (
+                  <div>
+                    <Label>AI Flags</Label>
+                    <div className="space-y-2">
+                      {selectedUser.aiFlags.map((flag, index) => (
+                        <p key={index} className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                          {flag}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-2">
+                  <DialogClose asChild>
+                    <Button variant="outline">Close</Button>
+                  </DialogClose>
+                  {selectedUser.status === 'active' ? (
+                    <>
+                      <Button variant="outline" onClick={() => handleUserAction(selectedUser.id, 'suspend')}>
+                        Suspend User
+                      </Button>
+                      <Button variant="destructive" onClick={() => handleUserAction(selectedUser.id, 'ban')}>
+                        Ban User
+                      </Button>
+                    </>
+                  ) : (
+                    <Button onClick={() => handleUserAction(selectedUser.id, 'activate')}>
+                      Activate User
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminGuard>
   )
-}
+} 

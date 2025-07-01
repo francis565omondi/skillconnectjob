@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Footer } from "@/components/footer"
+import { GoogleMap } from "@/components/ui/map"
 import {
   Mail,
   Phone,
@@ -322,6 +323,44 @@ export default function ContactPage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Office Locations Map */}
+      <section className="py-12 sm:py-16 md:py-20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+              Find Our Offices
+            </h2>
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+              Visit us at any of our locations across Kenya. Our main office is in Nairobi.
+            </p>
+          </div>
+
+          <Card className="simple-card">
+            <CardContent className="p-6">
+              <div className="h-96 rounded-lg overflow-hidden">
+                <GoogleMap
+                  center="Nairobi, Kenya"
+                  zoom={8}
+                  markers={[
+                    {
+                      position: "Westlands, Nairobi, Kenya",
+                      title: "SkillConnect - Main Office",
+                      info: "Westlands, Nairobi, Kenya<br/>Mon-Fri: 8:00 AM - 6:00 PM"
+                    },
+                    {
+                      position: "Nyali, Mombasa, Kenya",
+                      title: "SkillConnect - Mombasa Office",
+                      info: "Nyali, Mombasa, Kenya<br/>Mon-Fri: 8:00 AM - 6:00 PM"
+                    }
+                  ]}
+                  className="w-full h-full"
+                />
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </section>
 

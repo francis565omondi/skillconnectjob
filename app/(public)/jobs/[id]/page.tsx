@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Footer } from "@/components/footer"
 import { ApplyPostNavbar } from "@/components/apply-post-navbar"
+import { GoogleMap } from "@/components/ui/map"
 import { 
   MapPin, 
   Briefcase, 
@@ -391,6 +392,35 @@ export default function JobDetailPage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Location Map */}
+              <Card className="simple-card">
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold text-gray-900 flex items-center">
+                    <MapPin className="w-5 h-5 mr-2 text-orange-600" />
+                    Job Location
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-48 rounded-lg overflow-hidden border">
+                    <GoogleMap
+                      center={job.location}
+                      zoom={13}
+                      markers={[
+                        {
+                          position: job.location,
+                          title: job.title,
+                          info: `${job.company} - ${job.location}`
+                        }
+                      ]}
+                      className="w-full h-full"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600 mt-3 text-center">
+                    {job.location}
+                  </p>
                 </CardContent>
               </Card>
 

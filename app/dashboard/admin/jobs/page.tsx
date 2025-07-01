@@ -7,201 +7,169 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  SidebarInset,
-} from "@/components/ui/sidebar"
-import {
-  Home,
-  Users,
-  Briefcase,
-  Flag,
-  Shield,
-  Settings,
-  Bell,
-  Search,
-  LogOut,
-  Eye,
-  Ban,
-  CheckCircle,
-  Building,
-  FileText,
-  MapPin,
-  Calendar,
-  Filter,
-  DollarSign,
-} from "lucide-react"
-import Link from "next/link"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { Users, Shield, Briefcase, Brain, BarChart3, Settings, LogOut, Eye, AlertTriangle, CheckCircle, XCircle, Search, Filter, RefreshCw, Building, MapPin, DollarSign, Calendar, MoreHorizontal } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { AdminService, AdminJob } from "@/lib/adminService"
 import { AdminGuard } from "@/components/admin-auth-guard"
-import { supabase } from "@/lib/supabaseClient"
+import { Logo } from "@/components/logo"
+import Link from "next/link"
+
+interface Job extends AdminJob {
+  // Additional properties specific to this page if needed
+}
 
 export default function AdminJobsPage() {
-  const [jobs, setJobs] = useState([])
+  const [jobs, setJobs] = useState<AdminJob[]>([])
+  const [filteredJobs, setFilteredJobs] = useState<AdminJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedJob, setSelectedJob] = useState<AdminJob | null>(null)
+  const [showJobModal, setShowJobModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [filterStatus, setFilterStatus] = useState("all")
+  const [filterModeration, setFilterModeration] = useState("all")
 
-  // Fetch jobs data
   useEffect(() => {
-    fetchJobs()
+    loadJobs()
   }, [])
 
-  const fetchJobs = async () => {
-    try {
-      setIsLoading(true)
-      
-      const { data: jobsData, error } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          profiles!inner(first_name, last_name, email, company)
-        `)
-        .order('created_at', { ascending: false })
+  useEffect(() => {
+    filterJobs()
+  }, [jobs, searchQuery, filterStatus, filterModeration])
 
-      if (error) {
-        console.error('Error fetching jobs:', error)
-        setJobs([])
-      } else {
-        const formattedJobs = jobsData.map((job: any) => ({
-          id: job.id,
-          title: job.title || 'N/A',
-          company: job.company || 'N/A',
-          location: job.location || 'N/A',
-          salary: job.salary || 'Not specified',
-          status: job.status || 'N/A',
-          postedDate: job.created_at ? new Date(job.created_at).toLocaleDateString() : 'N/A',
-          employer: job.profiles ? [job.profiles.first_name, job.profiles.last_name].filter(Boolean).join(' ') || job.profiles.email || 'N/A' : 'N/A',
-          employerEmail: job.profiles?.email || 'N/A',
-          applications: job.applications_count || 0,
-          description: job.description || 'N/A',
-        }))
-        
-        setJobs(formattedJobs)
-      }
+  const loadJobs = async () => {
+    setIsLoading(true)
+    try {
+      const jobs = await AdminService.loadJobs()
+      setJobs(jobs)
     } catch (error) {
-      console.error('Error fetching jobs:', error)
-      setJobs([])
+      console.error('Error loading jobs:', error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleJobAction = async (jobId: string, action: "approve" | "remove") => {
+  // Set up real-time subscriptions
+  useEffect(() => {
+    console.log('Setting up real-time subscriptions for jobs page...')
+    
+    // Subscribe to jobs changes
+    const jobsSubscription = AdminService.subscribeToJobs((updatedJobs) => {
+      console.log('Jobs updated via subscription:', updatedJobs.length)
+      setJobs(updatedJobs)
+    })
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      console.log('Cleaning up real-time subscriptions...')
+      AdminService.unsubscribeFromAll()
+    }
+  }, [])
+
+  const filterJobs = () => {
+    let filtered = jobs.filter(job => {
+      const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           job.location.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesStatus = filterStatus === 'all' || job.status === filterStatus
+      const matchesModeration = filterModeration === 'all' || job.aiModerationStatus === filterModeration
+      return matchesSearch && matchesStatus && matchesModeration
+    })
+    setFilteredJobs(filtered)
+  }
+
+  const handleJobAction = async (jobId: string, action: 'approve' | 'reject' | 'feature') => {
     try {
+      let status = 'active'
+      if (action === 'reject') status = 'closed'
+
       const { error } = await supabase
         .from('jobs')
-        .update({ 
-          status: action === 'approve' ? 'active' : 'removed',
-          updated_at: new Date().toISOString()
-        })
+        .update({ status })
         .eq('id', jobId)
 
-      if (error) {
-        console.error('Error updating job status:', error)
-        return
-      }
+      if (error) throw error
 
-      // Refresh jobs list
-      fetchJobs()
+      setJobs(prev => prev.map(job => 
+        job.id === jobId ? { ...job, status } : job
+      ))
+
+      setShowJobModal(false)
     } catch (error) {
-      console.error('Error handling job action:', error)
+      console.error('Error updating job status:', error)
     }
   }
 
-  const filteredJobs = jobs.filter((job: any) => {
-    const matchesSearch = 
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.location.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === "all" || job.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  if (isLoading) {
+    return (
+      <AdminGuard>
+        <div className="min-h-screen bg-light-gradient flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading Jobs...</p>
+          </div>
+        </div>
+      </AdminGuard>
+    )
+  }
 
   return (
     <AdminGuard>
       <div className="min-h-screen bg-light-gradient">
         <SidebarProvider>
           <div className="flex min-h-screen w-full">
-            <Sidebar className="border-r border-orange-200 bg-white">
+            <Sidebar className="border-r border-red-200 bg-white shadow-lg">
               <SidebarHeader>
-                <div className="flex items-center space-x-3 px-4 py-4">
-                  <div className="w-10 h-10 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-                    <Shield className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-xl font-bold text-slate-900">Admin Panel</span>
+                <div className="px-4 py-4">
+                  <Logo showTagline={false} />
                 </div>
               </SidebarHeader>
 
               <SidebarContent>
                 <SidebarGroup>
-                  <SidebarGroupLabel className="text-slate-600 font-semibold uppercase tracking-wide text-xs">
-                    Dashboard
+                  <SidebarGroupLabel className="text-gray-600 font-semibold uppercase tracking-wide text-xs px-4">
+                    Administration
                   </SidebarGroupLabel>
                   <SidebarGroupContent>
                     <SidebarMenu>
                       <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                        >
+                        <SidebarMenuButton asChild className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium">
                           <Link href="/dashboard/admin">
-                            <Home className="w-5 h-5" />
-                            <span className="font-medium">Overview</span>
+                            <Shield className="w-5 h-5" />
+                            <span className="font-medium">Dashboard</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-
-                <SidebarGroup>
-                  <SidebarGroupLabel className="text-slate-600 font-semibold uppercase tracking-wide text-xs">
-                    Management
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
                       <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                        >
+                        <SidebarMenuButton asChild className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium">
                           <Link href="/dashboard/admin/users">
                             <Users className="w-5 h-5" />
-                            <span className="font-medium">Users</span>
+                            <span className="font-medium">User Management</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          isActive
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 data-[active=true]:bg-orange-100 data-[active=true]:text-orange-600 rounded-xl transition-all duration-200 font-medium"
-                        >
+                        <SidebarMenuButton asChild isActive className="text-gray-700 hover:text-red-600 hover:bg-red-50 data-[active=true]:bg-red-100 data-[active=true]:text-red-700 rounded-xl transition-all duration-200 font-medium">
                           <Link href="/dashboard/admin/jobs">
                             <Briefcase className="w-5 h-5" />
-                            <span className="font-medium">Jobs</span>
+                            <span className="font-medium">Job Moderation</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                        >
-                          <Link href="/dashboard/admin/verifications">
-                            <Shield className="w-5 h-5" />
-                            <span className="font-medium">Verifications</span>
+                        <SidebarMenuButton asChild className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium">
+                          <Link href="/dashboard/admin/ai">
+                            <Brain className="w-5 h-5" />
+                            <span className="font-medium">AI Insights</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton asChild className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium">
+                          <Link href="/dashboard/admin/analytics">
+                            <BarChart3 className="w-5 h-5" />
+                            <span className="font-medium">Analytics</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -210,62 +178,16 @@ export default function AdminJobsPage() {
                 </SidebarGroup>
 
                 <SidebarGroup>
-                  <SidebarGroupLabel className="text-slate-600 font-semibold uppercase tracking-wide text-xs">
-                    Moderation
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                        >
-                          <Link href="/dashboard/admin/moderation">
-                            <Flag className="w-5 h-5" />
-                            <span className="font-medium">Flagged Content</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                        >
-                          <Link href="/dashboard/admin/reports">
-                            <FileText className="w-5 h-5" />
-                            <span className="font-medium">Reports</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-
-                <SidebarGroup>
-                  <SidebarGroupLabel className="text-slate-600 font-semibold uppercase tracking-wide text-xs">
+                  <SidebarGroupLabel className="text-gray-600 font-semibold uppercase tracking-wide text-xs px-4">
                     System
                   </SidebarGroupLabel>
                   <SidebarGroupContent>
                     <SidebarMenu>
                       <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                        >
+                        <SidebarMenuButton asChild className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium">
                           <Link href="/dashboard/admin/settings">
                             <Settings className="w-5 h-5" />
                             <span className="font-medium">Settings</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                      <SidebarMenuItem>
-                        <SidebarMenuButton
-                          asChild
-                          className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                        >
-                          <Link href="/dashboard/admin/notifications">
-                            <Bell className="w-5 h-5" />
-                            <span className="font-medium">Notifications</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -277,10 +199,7 @@ export default function AdminJobsPage() {
               <SidebarFooter>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                    >
+                    <SidebarMenuButton asChild className="text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 font-medium">
                       <Link href="/auth/login">
                         <LogOut className="w-5 h-5" />
                         <span className="font-medium">Sign Out</span>
@@ -292,68 +211,122 @@ export default function AdminJobsPage() {
             </Sidebar>
 
             <SidebarInset className="bg-transparent">
-              <header className="flex h-16 shrink-0 items-center gap-2 border-b border-orange-200 px-4 bg-white/80 backdrop-blur-xl">
-                <SidebarTrigger className="-ml-1 text-slate-700 hover:bg-orange-50 hover:text-orange-600 rounded-xl" />
-                <div className="flex-1">
-                  <h1 className="text-lg font-semibold text-slate-900">Job Management</h1>
-                  <p className="text-sm text-slate-600">Monitor and manage job postings</p>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Badge className="bg-orange-500 text-white border-0 rounded-xl px-3 py-1">
-                    <Shield className="w-3 h-3 mr-1" />
-                    Administrator
-                  </Badge>
-                </div>
-              </header>
-
-              <main className="flex-1 space-y-8 p-6 scroll-simple">
+              <main className="flex-1 space-y-6 p-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-3xl font-bold text-slate-900 mb-2">Job Management</h2>
-                    <p className="text-slate-600 text-lg">Monitor and manage all job postings</p>
+                    <h1 className="text-3xl font-bold text-slate-900">Job Moderation</h1>
+                    <p className="text-slate-600 mt-1">Review and moderate job postings</p>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <Button variant="outline" size="sm" className="btn-secondary">
-                      <FileText className="w-4 h-4 mr-2" />
-                      Export Jobs
-                    </Button>
-                  </div>
+                  <Button onClick={loadJobs} variant="outline" disabled={isLoading}>
+                    <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
                 </div>
 
-                {/* Filters */}
+                {/* Stats Cards */}
+                <div className="grid gap-6 md:grid-cols-4">
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">Total Jobs</p>
+                          <p className="text-2xl font-bold text-slate-900">{jobs.length}</p>
+                        </div>
+                        <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                          <Briefcase className="w-6 h-6 text-blue-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">Active Jobs</p>
+                          <p className="text-2xl font-bold text-slate-900">
+                            {jobs.filter(j => j.status === 'active').length}
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                          <CheckCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">Flagged Jobs</p>
+                          <p className="text-2xl font-bold text-slate-900">
+                            {jobs.filter(j => j.aiModerationStatus === 'flagged').length}
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                          <AlertTriangle className="w-6 h-6 text-red-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="simple-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">Total Applications</p>
+                          <p className="text-2xl font-bold text-slate-900">
+                            {jobs.reduce((sum, job) => sum + job.applications_count, 0)}
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                          <Users className="w-6 h-6 text-purple-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Filters and Search */}
                 <Card className="simple-card">
-                  <CardContent className="p-4 flex flex-col md:flex-row gap-4">
-                    <div className="relative flex-grow">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                      <Input
-                        placeholder="Search jobs by title, company, or location..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Filter className="w-4 h-4 text-slate-500" />
-                      <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-32 form-input">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white border-orange-200">
-                          <SelectItem value="all" className="text-slate-900 hover:bg-orange-50">
-                            All Status
-                          </SelectItem>
-                          <SelectItem value="active" className="text-slate-900 hover:bg-orange-50">
-                            Active
-                          </SelectItem>
-                          <SelectItem value="pending" className="text-slate-900 hover:bg-orange-50">
-                            Pending
-                          </SelectItem>
-                          <SelectItem value="removed" className="text-slate-900 hover:bg-orange-50">
-                            Removed
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row gap-4">
+                      <div className="relative flex-grow">
+                        <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                        <Input
+                          placeholder="Search by title, company, or location..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-slate-500" />
+                        <Select value={filterStatus} onValueChange={setFilterStatus}>
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="closed">Closed</SelectItem>
+                            <SelectItem value="draft">Draft</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select value={filterModeration} onValueChange={setFilterModeration}>
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue placeholder="AI Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All AI Status</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="flagged">Flagged</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -361,110 +334,192 @@ export default function AdminJobsPage() {
                 {/* Jobs Table */}
                 <Card className="simple-card">
                   <CardHeader>
-                    <CardTitle className="text-slate-900 flex items-center">
-                      <Briefcase className="w-5 h-5 mr-2 text-orange-600" />
-                      Job Postings ({filteredJobs.length})
-                    </CardTitle>
-                    <CardDescription className="text-slate-600">
-                      Manage job postings, approve or remove listings
-                    </CardDescription>
+                    <CardTitle className="text-slate-900">Jobs ({filteredJobs.length} found)</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {isLoading ? (
-                      <div className="space-y-4">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <div key={i} className="animate-pulse">
-                            <div className="h-16 bg-slate-200 rounded"></div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="bg-orange-50 rounded-2xl border border-orange-100 overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="border-orange-100 hover:bg-orange-100">
-                              <TableHead className="text-slate-700">Job</TableHead>
-                              <TableHead className="text-slate-700">Employer</TableHead>
-                              <TableHead className="text-slate-700">Status</TableHead>
-                              <TableHead className="text-slate-700">Posted</TableHead>
-                              <TableHead className="text-slate-700">Applications</TableHead>
-                              <TableHead className="text-slate-700">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredJobs.map((job: any) => (
-                              <TableRow key={job.id} className="border-orange-100 hover:bg-orange-100">
-                                <TableCell>
-                                  <div>
-                                    <div className="font-medium text-slate-900">{job.title || 'N/A'}</div>
-                                    <div className="text-sm text-slate-600">{job.company || 'N/A'}</div>
-                                    <div className="text-xs text-slate-500 flex items-center">
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Job</TableHead>
+                            <TableHead>Company</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>AI Status</TableHead>
+                            <TableHead>Applications</TableHead>
+                            <TableHead>Posted</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredJobs.slice(0, 20).map((job) => (
+                            <TableRow key={job.id}>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{job.title}</p>
+                                  <div className="flex items-center space-x-4 text-sm text-slate-500">
+                                    <span className="flex items-center">
                                       <MapPin className="w-3 h-3 mr-1" />
-                                      {job.location || 'N/A'}
-                                    </div>
-                                    <div className="text-xs text-slate-500 flex items-center">
+                                      {job.location}
+                                    </span>
+                                    <span className="flex items-center">
                                       <DollarSign className="w-3 h-3 mr-1" />
-                                      {job.salary || 'Not specified'}
-                                    </div>
+                                      {job.salary_min && job.salary_max 
+                                        ? `${job.salary_min}-${job.salary_max}`
+                                        : 'Not specified'
+                                      }
+                                    </span>
                                   </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div>
-                                    <div className="font-medium text-slate-900">{job.employer || 'N/A'}</div>
-                                    <div className="text-sm text-slate-600">{job.employerEmail || 'N/A'}</div>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    className={`${
-                                      job.status === "active"
-                                        ? "bg-green-500"
-                                        : job.status === "pending"
-                                          ? "bg-orange-500"
-                                          : "bg-red-500"
-                                    } text-white border-0 rounded-xl`}
-                                  >
-                                    {job.status || 'N/A'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-slate-600">{job.postedDate || 'N/A'}</TableCell>
-                                <TableCell className="text-slate-600">{job.applications}</TableCell>
-                                <TableCell>
-                                  <div className="flex space-x-2">
-                                    <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white rounded-xl">
-                                      <Eye className="w-3 h-3" />
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <p className="font-medium">{job.company}</p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={
+                                  job.status === 'active' ? 'bg-green-100 text-green-800' :
+                                  job.status === 'closed' ? 'bg-red-100 text-red-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }>
+                                  {job.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={
+                                  job.aiModerationStatus === 'approved' ? 'bg-green-100 text-green-800' :
+                                  job.aiModerationStatus === 'flagged' ? 'bg-red-100 text-red-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }>
+                                  {job.aiModerationStatus}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <p className="text-sm font-medium">{job.applications_count}</p>
+                              </TableCell>
+                              <TableCell>
+                                <p className="text-sm text-slate-600">
+                                  {new Date(job.created_at).toLocaleDateString()}
+                                </p>
+                              </TableCell>
+                              <TableCell>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm">
+                                      <MoreHorizontal className="w-4 h-4" />
                                     </Button>
-                                    {job.status === "pending" ? (
-                                      <Button
-                                        size="sm"
-                                        className="bg-green-500 hover:bg-green-600 text-white rounded-xl"
-                                        onClick={() => handleJobAction(job.id, "approve")}
-                                      >
-                                        <CheckCircle className="w-3 h-3" />
-                                      </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                    <DropdownMenuItem onClick={() => {
+                                      setSelectedJob(job)
+                                      setShowJobModal(true)
+                                    }}>
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      View Details
+                                    </DropdownMenuItem>
+                                    {job.status === 'active' ? (
+                                      <DropdownMenuItem onClick={() => handleJobAction(job.id, 'reject')}>
+                                        <XCircle className="w-4 h-4 mr-2" />
+                                        Close Job
+                                      </DropdownMenuItem>
                                     ) : (
-                                      <Button
-                                        size="sm"
-                                        className="bg-red-500 hover:bg-red-600 text-white rounded-xl"
-                                        onClick={() => handleJobAction(job.id, "remove")}
-                                      >
-                                        <Ban className="w-3 h-3" />
-                                      </Button>
+                                      <DropdownMenuItem onClick={() => handleJobAction(job.id, 'approve')}>
+                                        <CheckCircle className="w-4 h-4 mr-2" />
+                                        Activate Job
+                                      </DropdownMenuItem>
                                     )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </CardContent>
                 </Card>
               </main>
             </SidebarInset>
           </div>
         </SidebarProvider>
+
+        {/* Job Details Modal */}
+        <Dialog open={showJobModal} onOpenChange={setShowJobModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Job Details</DialogTitle>
+            </DialogHeader>
+            {selectedJob && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Title</p>
+                    <p className="text-sm">{selectedJob.title}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Company</p>
+                    <p className="text-sm">{selectedJob.company}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Location</p>
+                    <p className="text-sm">{selectedJob.location}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Type</p>
+                    <p className="text-sm">{selectedJob.type}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Status</p>
+                    <Badge className={
+                      selectedJob.status === 'active' ? 'bg-green-100 text-green-800' :
+                      selectedJob.status === 'closed' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }>
+                      {selectedJob.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">AI Status</p>
+                    <Badge className={
+                      selectedJob.aiModerationStatus === 'approved' ? 'bg-green-100 text-green-800' :
+                      selectedJob.aiModerationStatus === 'flagged' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }>
+                      {selectedJob.aiModerationStatus}
+                    </Badge>
+                  </div>
+                </div>
+                
+                {selectedJob.aiFlags && selectedJob.aiFlags.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">AI Flags</p>
+                    <div className="space-y-2 mt-2">
+                      {selectedJob.aiFlags.map((flag, index) => (
+                        <div key={index} className="p-2 bg-red-50 border border-red-200 rounded">
+                          <p className="text-sm text-red-800">{flag}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-2">
+                  <DialogClose asChild>
+                    <Button variant="outline">Close</Button>
+                  </DialogClose>
+                  {selectedJob.status === 'active' ? (
+                    <Button variant="destructive" onClick={() => handleJobAction(selectedJob.id, 'reject')}>
+                      Close Job
+                    </Button>
+                  ) : (
+                    <Button onClick={() => handleJobAction(selectedJob.id, 'approve')}>
+                      Activate Job
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminGuard>
   )

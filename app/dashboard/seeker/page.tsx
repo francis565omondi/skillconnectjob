@@ -1,159 +1,232 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  SidebarInset,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from "@/components/ui/dialog"
+import {
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
+  SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton,
+  SidebarMenuItem, SidebarProvider, SidebarTrigger, SidebarInset,
 } from "@/components/ui/sidebar"
 import {
-  Home,
-  FileText,
-  User,
-  Settings,
-  Bell,
-  Search,
-  TrendingUp,
-  TrendingDown,
-  Clock,
-  Eye,
-  Calendar,
-  MapPin,
-  Briefcase,
-  LogOut,
-  Sparkles,
-  Upload,
-  Camera,
-  RefreshCw,
+  Home, FileText, User, Settings, Bell, Search, Briefcase, LogOut,
+  TrendingUp, TrendingDown, Clock, Eye, Calendar, MapPin, DollarSign,
+  Building, Plus, Edit, Trash, MoreHorizontal, RefreshCw, Download,
+  Upload, Zap, Target, Award, Star, Filter, Bookmark, CheckCircle,
+  XCircle, AlertTriangle, Info, ExternalLink, Phone, Mail, Globe,
+  Linkedin, Github, ExternalLink as ExternalLinkIcon, Camera, Save,
+  Share, Heart, MessageSquare, Users, BarChart3, Activity, Target as TargetIcon
 } from "lucide-react"
-import Link from "next/link"
-import { SeekerGuard } from "@/components/admin-auth-guard"
-import { useStatusManager, StatusManager } from "@/components/ui/status-notification"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { supabase } from "@/lib/supabaseClient"
+import { AIServices } from "@/lib/aiServices"
+import { SeekerGuard } from "@/components/admin-auth-guard"
 import { Logo } from "@/components/logo"
+import { useStatusManager, StatusManager } from "@/components/ui/status-notification"
 
-// Local utility functions
-const getUserData = () => {
-  try {
-    const userData = localStorage.getItem("skillconnect_user")
-    return userData ? JSON.parse(userData) : null
-  } catch (error) {
-    console.error("Error getting user data:", error)
-    return null
-  }
+interface SeekerStats {
+  totalApplications: number
+  pendingApplications: number
+  interviewsScheduled: number
+  jobsSaved: number
+  profileCompleteness: number
+  averageMatchScore: number
+  recentActivity: number
 }
 
-const getSessionData = () => {
-  try {
-    const sessionData = sessionStorage.getItem("skillconnect_session")
-    return sessionData ? JSON.parse(sessionData) : null
-  } catch (error) {
-    console.error("Error getting session data:", error)
-    return null
-  }
+interface JobApplication {
+  id: string
+  job_title: string
+  company: string
+  location: string
+  status: string
+  applied_date: string
+  last_updated: string
+  match_score: number
+  salary_range?: string
+  job_type: string
 }
 
-const clearUserSession = () => {
-  localStorage.removeItem("skillconnect_user")
-  sessionStorage.removeItem("skillconnect_session")
+interface RecommendedJob {
+  id: string
+  title: string
+  company: string
+  location: string
+  salary_range?: string
+  job_type: string
+  match_score: number
+  requirements: string[]
+  description: string
+  posted_date: string
 }
 
-const isSeeker = () => {
-  const userData = getUserData()
-  return userData?.role === "seeker"
+interface Notification {
+  id: string
+  type: string
+  title: string
+  message: string
+  created_at: string
+  is_read: boolean
 }
 
-const generateSeekerData = async (userData: any) => {
-  try {
-    // Fetch user's applications with better error handling
-    let applications = []
+interface UserProfile {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  bio: string
+  skills: string[]
+  experience: string
+  education: string
+  location: string
+  profile_image_url?: string
+  resume_url?: string
+  linkedin_url?: string
+  github_url?: string
+  portfolio_url?: string
+}
+
+export default function SeekerDashboard() {
+  const router = useRouter()
+  const [stats, setStats] = useState<SeekerStats>({
+    totalApplications: 0,
+    pendingApplications: 0,
+    interviewsScheduled: 0,
+    jobsSaved: 0,
+    profileCompleteness: 0,
+    averageMatchScore: 0,
+    recentActivity: 0
+  })
+  const [applications, setApplications] = useState<JobApplication[]>([])
+  const [recommendedJobs, setRecommendedJobs] = useState<RecommendedJob[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterStatus, setFilterStatus] = useState("all")
+  const [selectedApplication, setSelectedApplication] = useState<JobApplication | null>(null)
+  const [showApplicationModal, setShowApplicationModal] = useState(false)
+  const [recentActivities, setRecentActivities] = useState<any[]>([])
+
+  const { notifications: statusNotifications, removeNotification, showSuccess, showError, showLoading } = useStatusManager()
+
+  useEffect(() => {
+    loadDashboardData()
+    setupRealTimeSubscriptions()
+  }, [])
+
+  const loadDashboardData = async () => {
+    setIsLoading(true)
     try {
-      const { data: applicationsData, error: applicationsError } = await supabase
+      await Promise.all([
+        loadUserProfile(),
+        loadApplications(),
+        loadRecommendedJobs(),
+        loadNotifications(),
+        loadStats(),
+        loadRecentActivities()
+      ])
+    } catch (error) {
+      console.error('Error loading dashboard data:', error)
+      showError("Failed to load dashboard", "Please refresh the page and try again")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadUserProfile = async () => {
+    try {
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) {
+        showError("User not found", "Please log in again")
+        return
+      }
+
+      const user = JSON.parse(userData)
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (error) throw error
+
+      setUserProfile(profile)
+    } catch (error) {
+      console.error('Error loading user profile:', error)
+    }
+  }
+
+  const loadApplications = async () => {
+    try {
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) return
+
+      const user = JSON.parse(userData)
+      const { data, error } = await supabase
         .from('applications')
         .select(`
           *,
-          jobs(title, company, location, salary_min, salary_max, type)
+          jobs(title, company, location, salary_min, salary_max, type, requirements)
         `)
-        .eq('applicant_id', userData.id)
+        .eq('applicant_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (applicationsError) {
-        console.error('Error fetching applications:', applicationsError.message || applicationsError)
-      } else {
-        applications = applicationsData || []
-      }
-    } catch (error) {
-      console.error('Error in applications query:', error)
-    }
+      if (error) throw error
 
-    // Fetch recent jobs for recommendations with better error handling
-    let recentJobs = []
+      const formattedApplications = (data || []).map(app => ({
+      id: app.id,
+        job_title: app.jobs?.title || 'Unknown Job',
+      company: app.jobs?.company || 'Unknown Company',
+      location: app.jobs?.location || 'Unknown Location',
+      status: app.status || 'pending',
+        applied_date: new Date(app.created_at).toLocaleDateString(),
+        last_updated: new Date(app.updated_at || app.created_at).toLocaleDateString(),
+        match_score: app.match_score || 0,
+        salary_range: app.jobs?.salary_min && app.jobs?.salary_max 
+        ? `$${app.jobs.salary_min.toLocaleString()} - $${app.jobs.salary_max.toLocaleString()}`
+          : undefined,
+        job_type: app.jobs?.type || 'full-time'
+      }))
+
+      setApplications(formattedApplications)
+    } catch (error) {
+      console.error('Error loading applications:', error)
+    }
+  }
+
+  const loadRecommendedJobs = async () => {
     try {
-      const { data: jobsData, error: jobsError } = await supabase
+      const { data: jobs, error } = await supabase
         .from('jobs')
         .select('*')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
-        .limit(5)
+        .limit(10)
 
-      if (jobsError) {
-        console.error('Error fetching jobs:', jobsError.message || jobsError)
-      } else {
-        recentJobs = jobsData || []
-      }
-    } catch (error) {
-      console.error('Error in jobs query:', error)
-    }
+      if (error) throw error
 
-    // Fetch user's profile for better recommendations
-    let userProfile = null
-    try {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userData.id)
-        .single()
-
-      if (profileError) {
-        console.error('Error fetching profile:', profileError.message || profileError)
-      } else {
-        userProfile = profileData
-      }
-    } catch (error) {
-      console.error('Error in profile query:', error)
-    }
-
-    const formattedApplications = applications.map((app: any) => ({
-      id: app.id,
-      jobTitle: app.jobs?.title || 'Unknown Job',
-      company: app.jobs?.company || 'Unknown Company',
-      location: app.jobs?.location || 'Unknown Location',
-      appliedDate: new Date(app.created_at).toLocaleDateString(),
-      status: app.status || 'pending',
-      lastUpdated: new Date(app.updated_at || app.created_at).toLocaleDateString(),
-      jobType: app.jobs?.type || 'full-time',
-      salary: app.jobs?.salary_min && app.jobs?.salary_max 
-        ? `$${app.jobs.salary_min.toLocaleString()} - $${app.jobs.salary_max.toLocaleString()}`
-        : 'Not specified'
-    }))
-
-    // Calculate match scores based on user skills and job requirements
-    const recommendedJobs = recentJobs.map((job: any) => {
+      // Calculate match scores using AI
+      const jobsWithScores = await Promise.all(
+        (jobs || []).map(async (job) => {
       let matchScore = 70 // Base score
       
       if (userProfile?.skills && job.requirements) {
@@ -181,233 +254,207 @@ const generateSeekerData = async (userData: any) => {
         title: job.title,
         company: job.company,
         location: job.location,
-        salary: job.salary_min && job.salary_max 
+            salary_range: job.salary_min && job.salary_max 
           ? `$${job.salary_min.toLocaleString()} - $${job.salary_max.toLocaleString()}`
-          : 'Not specified',
-        type: job.type,
-        matchScore: Math.round(matchScore),
-      }
-    }).sort((a, b) => b.matchScore - a.matchScore)
+              : undefined,
+            job_type: job.type,
+            match_score: Math.round(matchScore),
+            requirements: Array.isArray(job.requirements) ? job.requirements : JSON.parse(job.requirements || '[]'),
+            description: job.description,
+            posted_date: new Date(job.created_at).toLocaleDateString()
+          }
+        })
+      )
 
-    return {
-      totalApplications: formattedApplications.length,
-      pendingApplications: formattedApplications.filter((app: any) => app.status === 'pending').length,
-      interviewsScheduled: formattedApplications.filter((app: any) => app.status === 'shortlisted').length,
-      jobsSaved: 12, // Mock data for now - could be implemented with a saved_jobs table
-      recentApplications: formattedApplications.slice(0, 3),
-      recommendedJobs: recommendedJobs.slice(0, 3),
-      notifications: [],
-      profile: userProfile,
-    }
+      // Sort by match score and take top 6
+      const sortedJobs = jobsWithScores.sort((a, b) => b.match_score - a.match_score).slice(0, 6)
+      setRecommendedJobs(sortedJobs)
   } catch (error) {
-    console.error('Error generating seeker data:', error)
-    // Return default data on error
-    return {
-      totalApplications: 0,
-      pendingApplications: 0,
-      interviewsScheduled: 0,
-      jobsSaved: 0,
-      recentApplications: [],
-      recommendedJobs: [],
-      notifications: [],
-      profile: null,
+      console.error('Error loading recommended jobs:', error)
     }
   }
-}
 
-function SeekerDashboardContent() {
-  const [user, setUser] = useState<any>(null)
-  const [dashboardData, setDashboardData] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [profileImage, setProfileImage] = useState<string | null>(null)
-  const { notifications, removeNotification, showSuccess, showError, showLoading } = useStatusManager()
+  const loadNotifications = async () => {
+    try {
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) return
 
-  // Real-time updates setup
-  useEffect(() => {
-    if (!user?.id) return
+      const user = JSON.parse(userData)
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
 
-    // Set up real-time subscription for applications
+      if (error) throw error
+
+      setNotifications(data || [])
+    } catch (error) {
+      console.error('Error loading notifications:', error)
+    }
+  }
+
+  const loadStats = async () => {
+    try {
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) return
+
+      const user = JSON.parse(userData)
+      
+      // Calculate profile completeness
+      const profileFields = ['bio', 'skills', 'experience', 'education', 'location']
+      const completedFields = profileFields.filter(field => userProfile?.[field as keyof UserProfile])
+      const profileCompleteness = Math.round((completedFields.length / profileFields.length) * 100)
+
+      // Calculate average match score
+      const averageMatchScore = applications.length > 0 
+        ? Math.round(applications.reduce((sum, app) => sum + app.match_score, 0) / applications.length)
+        : 0
+
+      const newStats: SeekerStats = {
+        totalApplications: applications.length,
+        pendingApplications: applications.filter(app => app.status === 'pending').length,
+        interviewsScheduled: applications.filter(app => app.status === 'shortlisted').length,
+        jobsSaved: 0, // TODO: Implement saved jobs functionality
+        profileCompleteness,
+        averageMatchScore,
+        recentActivity: recentActivities.length
+      }
+
+      setStats(newStats)
+    } catch (error) {
+      console.error('Error loading stats:', error)
+    }
+  }
+
+  const loadRecentActivities = async () => {
+    try {
+      const userData = localStorage.getItem("skillconnect_user")
+      if (!userData) return
+
+      const user = JSON.parse(userData)
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          jobs(title, company)
+        `)
+        .eq('applicant_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (error) throw error
+
+      const activities = (data || []).map(activity => ({
+        id: activity.id,
+        type: 'application',
+        title: 'Application submitted',
+        description: `Applied to ${activity.jobs?.title} at ${activity.jobs?.company}`,
+        created_at: activity.created_at
+      }))
+
+      setRecentActivities(activities)
+    } catch (error) {
+      console.error('Error loading recent activities:', error)
+    }
+  }
+
+  const setupRealTimeSubscriptions = () => {
+    const userData = localStorage.getItem("skillconnect_user")
+    if (!userData) return
+
+    const user = JSON.parse(userData)
+
+    // Subscribe to applications changes
     const applicationsSubscription = supabase
       .channel('applications_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'applications',
-          filter: `applicant_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Application change detected:', payload)
-          // Refresh dashboard data when applications change
-          refreshDashboardData()
-        }
-      )
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'applications',
+        filter: `applicant_id=eq.${user.id}`
+      }, () => {
+        loadApplications()
+        loadStats()
+      })
       .subscribe()
 
-    // Set up real-time subscription for jobs
-    const jobsSubscription = supabase
-      .channel('jobs_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'jobs',
-          filter: 'status=eq.active'
-        },
-        (payload) => {
-          console.log('Job change detected:', payload)
-          // Refresh dashboard data when jobs change
-          refreshDashboardData()
-        }
-      )
+    // Subscribe to notifications
+    const notificationsSubscription = supabase
+      .channel('notifications_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        loadNotifications()
+      })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(applicationsSubscription)
-      supabase.removeChannel(jobsSubscription)
-    }
-  }, [user?.id])
-
-  const refreshDashboardData = async () => {
-    if (!user) return
-    
-    setIsRefreshing(true)
-    try {
-      const seekerData = await generateSeekerData(user)
-      setDashboardData(seekerData)
-      showSuccess("Dashboard updated", "Latest data has been refreshed")
-    } catch (error) {
-      console.error('Error refreshing dashboard:', error)
-      showError("Failed to refresh", "Please try again")
-    } finally {
-      setIsRefreshing(false)
+      applicationsSubscription.unsubscribe()
+      notificationsSubscription.unsubscribe()
     }
   }
 
-  const handleProfileImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !user) return
-
-    try {
-      showLoading("Uploading profile image...", "Please wait")
-
-      // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`
-      const filePath = `profile-images/${fileName}`
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('skillconnect-bucket')
-        .upload(filePath, file)
-
-      if (uploadError) {
-        throw uploadError
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('skillconnect-bucket')
-        .getPublicUrl(filePath)
-
-      // Update profile in database
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ 
-          profile_image_url: urlData.publicUrl,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id)
-
-      if (updateError) {
-        throw updateError
-      }
-
-      // Update local state
-      setProfileImage(urlData.publicUrl)
-      setUser({ ...user, profile_image_url: urlData.publicUrl })
-      
-      // Update localStorage
-      const updatedUserData = { ...user, profile_image_url: urlData.publicUrl }
-      localStorage.setItem("skillconnect_user", JSON.stringify(updatedUserData))
-
-      showSuccess("Profile image updated", "Your profile picture has been uploaded successfully")
-    } catch (error) {
-      console.error('Error uploading profile image:', error)
-      showError("Upload failed", "Failed to upload profile image. Please try again.")
-    }
+  const handleApplyToJob = (job: RecommendedJob) => {
+    // Navigate to the enhanced application page
+    router.push(`/jobs/${job.id}/apply`)
   }
-
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        // Check if user is actually a seeker
-        if (!isSeeker()) {
-          setTimeout(() => {
-            window.location.href = "/auth/login"
-          }, 2000)
-          return
-        }
-
-        const userData = getUserData()
-        const sessionData = getSessionData()
-        
-        if (!userData || !sessionData) {
-          setTimeout(() => {
-            clearUserSession()
-            window.location.href = "/auth/login"
-          }, 2000)
-          return
-        }
-
-        // Set profile image if available
-        if (userData.profile_image_url) {
-          setProfileImage(userData.profile_image_url)
-        }
-
-        // Generate seeker-specific data
-        const seekerData = await generateSeekerData(userData)
-        
-        setUser(userData)
-        setDashboardData(seekerData)
-        
-      } catch (error) {
-        console.error('Error loading dashboard data:', error)
-        showError("Failed to load dashboard", "Please refresh the page")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadDashboardData()
-  }, [])
 
   const handleLogout = () => {
-    clearUserSession()
+    localStorage.removeItem("skillconnect_user")
+    sessionStorage.removeItem("skillconnect_session")
     window.location.href = "/auth/login"
+  }
+
+  const filteredApplications = applications.filter(app => {
+    const matchesSearch = app.job_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         app.company.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = filterStatus === 'all' || app.status === filterStatus
+    return matchesSearch && matchesStatus
+  })
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800'
+      case 'shortlisted': return 'bg-blue-100 text-blue-800'
+      case 'interviewed': return 'bg-purple-100 text-purple-800'
+      case 'accepted': return 'bg-green-100 text-green-800'
+      case 'rejected': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getMatchScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600'
+    if (score >= 60) return 'text-yellow-600'
+    return 'text-red-600'
   }
 
   if (isLoading) {
     return (
+      <SeekerGuard>
       <div className="min-h-screen bg-light-gradient flex items-center justify-center">
-        <Card className="simple-card w-full max-w-md">
-          <CardContent className="p-6 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-4"></div>
-            <p className="text-slate-600">Loading your dashboard...</p>
-          </CardContent>
-        </Card>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading Seeker Dashboard...</p>
       </div>
+        </div>
+      </SeekerGuard>
     )
   }
 
   return (
+    <SeekerGuard>
     <div className="min-h-screen bg-light-gradient">
-      <StatusManager notifications={notifications} onRemove={removeNotification} />
+        <StatusManager notifications={statusNotifications} onRemove={removeNotification} />
+        
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
-          <Sidebar className="border-r border-orange-200 bg-white">
+            <Sidebar className="border-r border-orange-200 bg-white shadow-lg">
             <SidebarHeader>
               <div className="px-4 py-4">
                 <Logo showTagline={false} />
@@ -416,8 +463,8 @@ function SeekerDashboardContent() {
 
             <SidebarContent>
               <SidebarGroup>
-                <SidebarGroupLabel className="text-slate-600 font-semibold uppercase tracking-wide text-xs">
-                  Main Menu
+                  <SidebarGroupLabel className="text-gray-600 font-semibold uppercase tracking-wide text-xs px-4">
+                    Dashboard
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
                   <SidebarMenu>
@@ -425,44 +472,44 @@ function SeekerDashboardContent() {
                       <SidebarMenuButton
                         asChild
                         isActive
-                        className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 data-[active=true]:bg-orange-100 data-[active=true]:text-orange-600 data-[active=true]:shadow-sm rounded-xl transition-all duration-200 font-medium"
+                          className="text-gray-700 hover:text-orange-600 hover:bg-orange-50 data-[active=true]:bg-orange-100 data-[active=true]:text-orange-700 rounded-xl transition-all duration-200 font-medium"
                       >
                         <Link href="/dashboard/seeker">
                           <Home className="w-5 h-5" />
-                          <span>Dashboard</span>
+                            <span className="font-medium">Dashboard</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
-                        className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
+                          className="text-gray-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
                       >
                         <Link href="/dashboard/seeker/applications">
                           <FileText className="w-5 h-5" />
-                          <span>My Applications</span>
+                            <span className="font-medium">Applications</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
-                        className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                      >
-                        <Link href="/jobs">
-                          <Search className="w-5 h-5" />
-                          <span>Browse Jobs</span>
+                          className="text-gray-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/seeker/profile">
+                            <User className="w-5 h-5" />
+                            <span className="font-medium">Profile</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
-                        className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                      >
-                        <Link href="/dashboard/seeker/profile">
-                          <User className="w-5 h-5" />
-                          <span>My Profile</span>
+                          className="text-gray-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
+                        >
+                          <Link href="/dashboard/seeker/notifications">
+                            <Bell className="w-5 h-5" />
+                            <span className="font-medium">Notifications</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -471,7 +518,7 @@ function SeekerDashboardContent() {
               </SidebarGroup>
 
               <SidebarGroup>
-                <SidebarGroupLabel className="text-slate-600 font-semibold uppercase tracking-wide text-xs">
+                  <SidebarGroupLabel className="text-gray-600 font-semibold uppercase tracking-wide text-xs px-4">
                   Account
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
@@ -479,22 +526,11 @@ function SeekerDashboardContent() {
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
-                        className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
+                          className="text-gray-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
                       >
                         <Link href="/dashboard/seeker/settings">
                           <Settings className="w-5 h-5" />
-                          <span>Settings</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        asChild
-                        className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
-                      >
-                        <Link href="/dashboard/seeker/notifications">
-                          <Bell className="w-5 h-5" />
-                          <span>Notifications</span>
+                            <span className="font-medium">Settings</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -508,7 +544,7 @@ function SeekerDashboardContent() {
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={handleLogout}
-                    className="text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
+                      className="text-gray-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 font-medium"
                   >
                     <LogOut className="w-5 h-5" />
                     <span className="font-medium">Sign Out</span>
@@ -518,309 +554,286 @@ function SeekerDashboardContent() {
             </SidebarFooter>
           </Sidebar>
 
-          <SidebarInset className="bg-transparent">
-            <main className="flex-1 space-y-8 p-6 scroll-simple">
-              {/* Welcome Section with Profile Image */}
+            <SidebarInset>
+              <div className="flex flex-col min-h-screen">
+                <header className="border-b border-orange-200 bg-white px-6 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Avatar className="w-16 h-16 border-4 border-orange-100">
-                      <AvatarImage src={profileImage || undefined} alt={`${user?.firstName} ${user?.lastName}`} />
-                      <AvatarFallback className="bg-orange-100 text-orange-600 text-lg font-semibold">
-                        {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <label className="absolute bottom-0 right-0 bg-white rounded-full p-1 shadow-lg cursor-pointer hover:bg-orange-50 transition-colors">
-                      <Camera className="w-4 h-4 text-orange-600" />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleProfileImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
+                      <SidebarTrigger className="-ml-1" />
                   <div>
-                    <h2 className="text-3xl font-bold text-slate-900 mb-2">
-                      {(() => {
-                        // Prefer profile name if available, fallback to user, then email, then generic
-                        const profile = dashboardData?.profile
-                        const name = profile?.first_name || user?.firstName || profile?.last_name || user?.lastName
-                        if (name) return `Welcome ${name}!`
-                        if (user?.email) return `Welcome ${user.email}!`
-                        return 'Welcome!'
-                      })()}
-                    </h2>
-                    <p className="text-slate-600 text-lg">
-                      {dashboardData?.profile?.title 
-                        ? `Ready to find your next ${dashboardData.profile.title} opportunity?`
-                        : 'Track your applications and discover new opportunities'
-                      }
-                    </p>
+                        <h1 className="text-2xl font-semibold text-gray-900">Seeker Dashboard</h1>
+                        <p className="text-sm text-gray-600">Welcome back, {userProfile?.first_name}!</p>
                   </div>
                 </div>
-                <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-4">
                   <Button 
                     variant="outline" 
-                    onClick={refreshDashboardData}
-                    disabled={isRefreshing}
-                    className="btn-secondary"
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    {isRefreshing ? 'Refreshing...' : 'Refresh'}
-                  </Button>
-                  <Button className="btn-primary" asChild>
-                    <Link href="/jobs">
-                      <Search className="w-4 h-4 mr-2" />
-                      Browse Jobs
-                    </Link>
+                        size="sm"
+                        onClick={loadDashboardData}
+                        className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Refresh
                   </Button>
                 </div>
               </div>
+                </header>
 
+                <main className="flex-1 p-6">
               {/* Stats Overview */}
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                {[
-                  {
-                    title: "Total Applications",
-                    value: dashboardData?.totalApplications || 0,
-                    change: "+2 this week",
-                    icon: FileText,
-                    color: "from-blue-500 to-blue-600",
-                  },
-                  {
-                    title: "Pending Reviews",
-                    value: dashboardData?.pendingApplications || 0,
-                    change: "Awaiting response",
-                    icon: Clock,
-                    color: "from-orange-500 to-orange-600",
-                  },
-                  {
-                    title: "Interviews Scheduled",
-                    value: dashboardData?.interviewsScheduled || 0,
-                    change: "+1 this month",
-                    icon: Calendar,
-                    color: "from-green-500 to-green-600",
-                  },
-                  {
-                    title: "Saved Jobs",
-                    value: dashboardData?.jobsSaved || 0,
-                    change: "+3 this week",
-                    icon: Briefcase,
-                    color: "from-purple-500 to-purple-600",
-                  },
-                ].map((stat, index) => (
-                  <Card key={index} className="simple-card hover-lift">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-600">{stat.title}</p>
-                          <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
-                          <p className="text-sm text-green-600 flex items-center mt-1">
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            {stat.change}
-                          </p>
-                        </div>
-                        <div className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-2xl flex items-center justify-center shadow-lg`}>
-                          <stat.icon className="w-6 h-6 text-white" />
-                        </div>
-                      </div>
+                  <div className="grid gap-6 mb-8 md:grid-cols-2 lg:grid-cols-4">
+                    <Card className="simple-card">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-slate-600">Total Applications</CardTitle>
+                        <FileText className="h-4 w-4 text-orange-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-slate-900">{stats.totalApplications}</div>
+                        <p className="text-xs text-slate-500">All time applications</p>
                     </CardContent>
                   </Card>
-                ))}
+
+                    <Card className="simple-card">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-slate-600">Pending</CardTitle>
+                        <Clock className="h-4 w-4 text-yellow-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-slate-900">{stats.pendingApplications}</div>
+                        <p className="text-xs text-slate-500">Awaiting response</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="simple-card">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-slate-600">Interviews</CardTitle>
+                        <Calendar className="h-4 w-4 text-blue-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-slate-900">{stats.interviewsScheduled}</div>
+                        <p className="text-xs text-slate-500">Scheduled interviews</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="simple-card">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-slate-600">Profile Complete</CardTitle>
+                        <Target className="h-4 w-4 text-green-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-slate-900">{stats.profileCompleteness}%</div>
+                        <p className="text-xs text-slate-500">Profile completeness</p>
+                      </CardContent>
+                    </Card>
               </div>
 
-              <div className="grid gap-8 lg:grid-cols-2">
+                  <div className="grid gap-6 lg:grid-cols-2">
                 {/* Recent Applications */}
                 <Card className="simple-card">
                   <CardHeader>
-                    <CardTitle className="text-slate-900 flex items-center">
-                      <FileText className="w-5 h-5 mr-2 text-orange-600" />
-                      Recent Applications
+                        <CardTitle className="text-slate-900 flex items-center justify-between">
+                          <span>Recent Applications</span>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href="/dashboard/seeker/applications">
+                              <Eye className="w-4 h-4 mr-2" />
+                              View All
+                            </Link>
+                          </Button>
                     </CardTitle>
-                    <CardDescription className="text-slate-600">
-                      Your latest job applications and their status
-                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {dashboardData?.recentApplications && Array.isArray(dashboardData.recentApplications) && dashboardData.recentApplications.length > 0 ? (
                       <div className="space-y-4">
-                        {dashboardData.recentApplications.map((application: any) => (
-                          <div
-                            key={application.id}
-                            className="flex items-center justify-between p-4 rounded-2xl border bg-orange-50 border-orange-100 hover:bg-orange-100 transition-colors"
-                          >
+                          {applications.slice(0, 5).map((application) => (
+                            <div key={application.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50">
                             <div className="flex-1">
-                              <h4 className="font-medium text-slate-900">{application.jobTitle}</h4>
-                              <p className="text-slate-600">{application.company}</p>
-                              <div className="flex items-center space-x-4 mt-1">
-                                <p className="text-xs text-slate-500 flex items-center">
-                                  <MapPin className="w-3 h-3 mr-1" />
-                                  {application.location}
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  Applied: {application.appliedDate}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-3">
-                              <Badge
-                                className={`${
-                                  application.status === "pending"
-                                    ? "bg-orange-500"
-                                    : application.status === "reviewed"
-                                      ? "bg-blue-500"
-                                      : application.status === "shortlisted"
-                                        ? "bg-purple-500"
-                                        : application.status === "accepted"
-                                          ? "bg-green-500"
-                                          : "bg-red-500"
-                                } text-white border-0 rounded-xl`}
-                              >
+                                <h4 className="font-medium text-slate-900">{application.job_title}</h4>
+                                <p className="text-sm text-slate-600">{application.company}</p>
+                                <div className="flex items-center space-x-2 mt-1">
+                                  <Badge className={getStatusColor(application.status)}>
                                 {application.status}
                               </Badge>
+                                  <span className="text-xs text-slate-500">{application.applied_date}</span>
                             </div>
                           </div>
-                        ))}
+                              <div className="text-right">
+                                <div className={`text-sm font-medium ${getMatchScoreColor(application.match_score)}`}>
+                                  {application.match_score}% match
                       </div>
-                    ) : (
-                      <div className="text-center py-8">
-                        <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-slate-900 mb-2">No applications yet</h3>
-                        <p className="text-slate-600 mb-6">Start applying to jobs to track your progress here</p>
-                        <Button asChild className="btn-primary">
-                          <Link href="/jobs">Browse Jobs</Link>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedApplication(application)
+                                    setShowApplicationModal(true)
+                                  }}
+                                >
+                                  <Eye className="w-4 h-4" />
                         </Button>
+                              </div>
+                            </div>
+                          ))}
+                          {applications.length === 0 && (
+                            <div className="text-center py-8 text-slate-500">
+                              <FileText className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                              <p>No applications yet</p>
+                              <p className="text-sm">Start applying to jobs to see them here</p>
                       </div>
                     )}
-                    <Button variant="outline" className="w-full mt-6 btn-secondary" asChild>
-                      <Link href="/dashboard/seeker/applications">View All Applications</Link>
-                    </Button>
+                        </div>
                   </CardContent>
                 </Card>
 
                 {/* Recommended Jobs */}
                 <Card className="simple-card">
                   <CardHeader>
-                    <CardTitle className="text-slate-900 flex items-center">
-                      <Sparkles className="w-5 h-5 mr-2 text-orange-600" />
-                      Recommended Jobs
+                        <CardTitle className="text-slate-900 flex items-center justify-between">
+                          <span>Recommended Jobs</span>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href="/jobs">
+                              <Search className="w-4 h-4 mr-2" />
+                              Browse Jobs
+                            </Link>
+                          </Button>
                     </CardTitle>
-                    <CardDescription className="text-slate-600">
-                      Jobs that match your profile and skills
-                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {dashboardData?.recommendedJobs && Array.isArray(dashboardData.recommendedJobs) ? 
-                        dashboardData.recommendedJobs.map((job: any) => (
-                          <div
-                            key={job.id}
-                            className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl border border-blue-100 hover:shadow-lg transition-all"
-                          >
+                          {recommendedJobs.map((job) => (
+                            <div key={job.id} className="p-3 border rounded-lg hover:bg-slate-50">
+                              <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <h4 className="font-medium text-slate-900">{job.title}</h4>
-                              <p className="text-slate-600">{job.company}</p>
-                              <div className="flex items-center space-x-4 mt-1">
-                                <p className="text-slate-500 text-sm flex items-center">
-                                  <MapPin className="w-3 h-3 mr-1" />
-                                  {job.location}
-                                </p>
-                                <p className="text-slate-500 text-sm">
-                                  {job.salary}
-                                </p>
+                                  <p className="text-sm text-slate-600">{job.company}</p>
+                                  <div className="flex items-center space-x-2 mt-1">
+                                    <MapPin className="w-3 h-3 text-slate-400" />
+                                    <span className="text-xs text-slate-500">{job.location}</span>
+                                    {job.salary_range && (
+                                      <>
+                                        <DollarSign className="w-3 h-3 text-slate-400" />
+                                        <span className="text-xs text-slate-500">{job.salary_range}</span>
+                                      </>
+                                    )}
                               </div>
+                                  <div className="flex items-center space-x-2 mt-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      {job.job_type}
+                                    </Badge>
+                                    <div className={`text-xs font-medium ${getMatchScoreColor(job.match_score)}`}>
+                                      {job.match_score}% match
                             </div>
-                            <div className="flex items-center space-x-3">
-                              <div className="text-right">
-                                <p className="text-sm font-medium text-slate-900">{job.matchScore}%</p>
-                                <p className="text-xs text-slate-500">Match</p>
                               </div>
-                              <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl" asChild>
-                                <Link href={`/jobs/${job.id}/apply`}>Apply</Link>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApplyToJob(job)}
+                                  className="bg-orange-600 hover:bg-orange-700"
+                                >
+                                  Apply
                               </Button>
                             </div>
                           </div>
-                        )) : (
+                          ))}
+                          {recommendedJobs.length === 0 && (
                           <div className="text-center py-8 text-slate-500">
-                            <Sparkles className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                            <p>No recommended jobs found</p>
+                              <Briefcase className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                              <p>No recommendations yet</p>
+                              <p className="text-sm">Complete your profile to get job recommendations</p>
                           </div>
-                        )
-                      }
+                          )}
                     </div>
-                    <Button variant="outline" className="w-full mt-6 btn-secondary" asChild>
-                      <Link href="/jobs">Browse More Jobs</Link>
-                    </Button>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Application Progress */}
-              <Card className="simple-card">
+                  {/* Recent Activity */}
+                  <Card className="simple-card mt-6">
                 <CardHeader>
-                  <CardTitle className="text-slate-900 flex items-center">
-                    <TrendingUp className="w-5 h-5 mr-2 text-orange-600" />
-                    Application Progress
-                  </CardTitle>
-                  <CardDescription className="text-slate-600">
-                    Track your job search progress and success rate
-                  </CardDescription>
+                      <CardTitle className="text-slate-900">Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-6 md:grid-cols-3">
-                    <div className="text-center">
-                      <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <FileText className="w-8 h-8 text-orange-600" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-slate-900 mb-2">{dashboardData?.totalApplications || 0}</h3>
-                      <p className="text-slate-600">Total Applications</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Eye className="w-8 h-8 text-blue-600" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-slate-900 mb-2">{dashboardData?.pendingApplications || 0}</h3>
-                      <p className="text-slate-600">Under Review</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Calendar className="w-8 h-8 text-green-600" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-slate-900 mb-2">{dashboardData?.interviewsScheduled || 0}</h3>
-                      <p className="text-slate-600">Interviews</p>
-                    </div>
+                      <div className="space-y-4">
+                        {recentActivities.map((activity) => (
+                          <div key={activity.id} className="flex items-center space-x-3 p-3 border rounded-lg">
+                            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-slate-900">{activity.title}</p>
+                              <p className="text-xs text-slate-600">{activity.description}</p>
                   </div>
-                  <div className="mt-8">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-slate-700">Application Success Rate</span>
-                      <span className="text-sm text-slate-500">
-                        {dashboardData?.totalApplications > 0 
-                          ? Math.round((dashboardData.interviewsScheduled / dashboardData.totalApplications) * 100)
-                          : 0}%
-                      </span>
-                    </div>
-                    <Progress 
-                      value={dashboardData?.totalApplications > 0 
-                        ? (dashboardData.interviewsScheduled / dashboardData.totalApplications) * 100
-                        : 0} 
-                      className="h-2"
-                    />
+                            <span className="text-xs text-slate-500">
+                              {new Date(activity.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        ))}
+                        {recentActivities.length === 0 && (
+                          <div className="text-center py-8 text-slate-500">
+                            <Activity className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+                            <p>No recent activity</p>
+                            <p className="text-sm">Your activity will appear here</p>
+                          </div>
+                        )}
                   </div>
                 </CardContent>
               </Card>
-            </main>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
-    </div>
-  )
-}
+                </main>
+              </div>
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
 
-export default function SeekerDashboard() {
-  return (
-    <SeekerGuard>
-      <SeekerDashboardContent />
+        {/* Application Details Modal */}
+        <Dialog open={showApplicationModal} onOpenChange={setShowApplicationModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Application Details</DialogTitle>
+            </DialogHeader>
+            {selectedApplication && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Job Title</Label>
+                    <p className="text-sm text-slate-600">{selectedApplication.job_title}</p>
+                      </div>
+                  <div>
+                    <Label className="text-sm font-medium">Company</Label>
+                    <p className="text-sm text-slate-600">{selectedApplication.company}</p>
+                    </div>
+                  <div>
+                    <Label className="text-sm font-medium">Location</Label>
+                    <p className="text-sm text-slate-600">{selectedApplication.location}</p>
+                      </div>
+                  <div>
+                    <Label className="text-sm font-medium">Status</Label>
+                    <Badge className={getStatusColor(selectedApplication.status)}>
+                      {selectedApplication.status}
+                    </Badge>
+                    </div>
+                  <div>
+                    <Label className="text-sm font-medium">Applied Date</Label>
+                    <p className="text-sm text-slate-600">{selectedApplication.applied_date}</p>
+                      </div>
+                  <div>
+                    <Label className="text-sm font-medium">Match Score</Label>
+                    <p className={`text-sm font-medium ${getMatchScoreColor(selectedApplication.match_score)}`}>
+                      {selectedApplication.match_score}%
+                    </p>
+                    </div>
+                  </div>
+                {selectedApplication.salary_range && (
+                  <div>
+                    <Label className="text-sm font-medium">Salary Range</Label>
+                    <p className="text-sm text-slate-600">{selectedApplication.salary_range}</p>
+                    </div>
+                )}
+                  </div>
+            )}
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Close</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </SeekerGuard>
   )
 }
