@@ -20,7 +20,7 @@ jobs:
       - name: Run npm audit
         run: npm audit --audit-level=moderate
       - name: Run Snyk (if SNYK_TOKEN is set)
-        uses: snyk/actions/node@v3
+        uses: snyk/actions@v1.11.0
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true 
